@@ -1263,3 +1263,27 @@ img { display: block; max-width: 100%; }
   #view-queue { max-width: 700px; margin: 0 auto; }
   #view-settings { max-width: 680px; margin: 0 auto; }
 }
+
+/* ── GOOGLE DRIVE BANNER ───────────────────────────────────── */
+.drive-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 16px 4px;
+  padding: 10px 14px;
+  background: linear-gradient(135deg, #e8f4fb 0%, #ddeeff 100%);
+  border: 1px solid #b8d8f0;
+  border-radius: var(--radius-sm);
+  font-size: .84rem;
+  font-weight: 500;
+  color: #1a5276;
+  text-decoration: none;
+  transition: background .15s;
+  flex-shrink: 0;
+}
+.drive-banner:active { background: #d0e8f8; }
+.drive-banner span:first-of-type { flex: 1; }
+.drive-banner-arrow {
+  font-size: .9rem;
+  opacity: .7;
+}

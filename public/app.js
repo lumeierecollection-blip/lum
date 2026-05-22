@@ -367,6 +367,7 @@ const GENERATION_STEPS = [
   { key: 'capcut',   icon: '✂️',  label: 'CapCut edit brief' },
   { key: 'package',  icon: '📦', label: 'Assembling content package' },
   { key: 'tiktok_draft', icon: '📁', label: 'Saving TikTok draft' },
+  { key: 'drive',    icon: '☁️',  label: 'Uploading to Google Drive' },
 ];
 
 async function startProductGeneration(formData) {
@@ -557,6 +558,19 @@ async function openContentSheet(slug) {
       p.season   || '',
       colours    || '',
     ].filter(Boolean).join(' · ');
+
+    // Drive folder banner
+    const existingBanner = $('#driveBanner');
+    if (existingBanner) existingBanner.remove();
+    if (detail.driveFolderUrl) {
+      const banner = mk('a', 'drive-banner');
+      banner.id   = 'driveBanner';
+      banner.href = detail.driveFolderUrl;
+      banner.target = '_blank';
+      banner.rel  = 'noopener noreferrer';
+      banner.innerHTML = '☁️ <span>Open in Google Drive</span> <span class="drive-banner-arrow">↗</span>';
+      $('#contentSheet').insertBefore(banner, $('#contentBody'));
+    }
 
     // Images
     const imgStrip = $('#contentImages');
@@ -1294,6 +1308,13 @@ async function renderSettings() {
       connected: integrations.tiktok,
       connectedNote: 'TikTok Content Posting API connected.',
       notSetNote: 'Add TIKTOK_ACCESS_TOKEN and set TIKTOK_APPROVED=true in .env',
+    },
+    {
+      icon: '☁️',
+      name: 'Google Drive',
+      connected: st?.drive?.enabled,
+      connectedNote: 'Every product pack uploads automatically to your Drive folder.',
+      notSetNote: 'Set GOOGLE_DRIVE_ENABLED=true, GOOGLE_DRIVE_FOLDER_ID, and GOOGLE_SERVICE_ACCOUNT_JSON in .env',
     },
   ];
 

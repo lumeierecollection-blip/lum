@@ -23,6 +23,7 @@ import { saveTikTokDraft } from './modules/tiktok-queue.js';
 import { generateProductCalendarEntry } from './modules/calendar-generator.js';
 import { assemblePackage } from './modules/packager.js';
 import { getActiveProvider } from './config/ai-provider.js';
+import { uploadProductToDrive, checkDriveConnection } from './modules/google-drive.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const OUTPUT_DIR = process.env.OUTPUT_DIR || path.join(__dirname, 'output');
@@ -84,16 +85,18 @@ app.get('/api/status', (req, res) => {
   const hasMeta = !!(process.env.META_LONG_LIVED_TOKEN && process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID);
   const hasPinterest = !!process.env.PINTEREST_ACCESS_TOKEN;
   const hasTikTok = !!(process.env.TIKTOK_ACCESS_TOKEN && process.env.TIKTOK_APPROVED === 'true');
+  const hasDrive  = process.env.GOOGLE_DRIVE_ENABLED === 'true' && !!process.env.GOOGLE_DRIVE_FOLDER_ID;
 
   res.json({
     ai,
     ready: hasGroq || hasGemini || hasOpenRouter || !!process.env.OLLAMA_BASE_URL,
+    drive: { enabled: hasDrive },
     integrations: {
-      shopify: hasShopify,
+      shopify:   hasShopify,
       instagram: hasMeta,
-      facebook: hasMeta,
+      facebook:  hasMeta,
       pinterest: hasPinterest,
-      tiktok: hasTikTok,
+      tiktok:    hasTikTok,
     },
   });
 });
@@ -164,6 +167,7 @@ app.get('/api/products/:slug', (req, res) => {
   res.json({
     product: meta?.product,
     processedAt: meta?.processedAt,
+    driveFolderUrl: meta?.driveFolderUrl || null,
     images: listImages(slug),
     content: {
       copyPack,
@@ -278,12 +282,36 @@ app.post('/api/products', async (req, res) => {
       imageFiles: imageFiles.map((f) => ({ filename: f.filename, label: f.label })),
     });
 
+    // Step 9: Google Drive upload (if enabled)
+    let driveResult = null;
+    if (process.env.GOOGLE_DRIVE_ENABLED === 'true') {
+      send('drive', 'Uploading to Google Drive...');
+      try {
+        driveResult = await uploadProductToDrive(
+          product,
+          contentPack,
+          imageFiles,
+          productDir,
+          (msg) => send('drive', msg),
+        );
+        send('drive', `✓ ${driveResult.fileCount} files uploaded to Drive`);
+        // Persist the Drive folder URL in product meta for easy access
+        const metaPath = path.join(productDir, 'product-meta.json');
+        const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+        meta.driveFolderUrl = driveResult.folderUrl;
+        fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2));
+      } catch (err) {
+        send('drive', `Drive upload failed: ${err.message}`, { warning: true });
+      }
+    }
+
     const elapsed = Math.round((Date.now() - startTime) / 1000);
     sseDone(res, {
       slug: product.slug,
       name: product.name,
       elapsedSeconds: elapsed,
       imageCount: imageFiles.length,
+      driveFolderUrl: driveResult?.folderUrl || null,
     });
   } catch (err) {
     sseError(res, `Processing failed: ${err.message}`);
