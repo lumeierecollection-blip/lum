@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lumière Collection — Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ── SIDEBAR ─────────────────────────────────────────────── -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-brand">
+    <span class="brand-name">Lumière</span>
+    <span class="brand-tag">Collection</span>
+  </div>
+  <nav class="sidebar-nav">
+    <a href="#" class="nav-item active" data-view="products">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      Products
+    </a>
+    <a href="#" class="nav-item" data-view="schedule">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      Schedule
+    </a>
+    <a href="#" class="nav-item" data-view="queue">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3" cy="6" r="1" fill="currentColor"/><circle cx="3" cy="12" r="1" fill="currentColor"/><circle cx="3" cy="18" r="1" fill="currentColor"/></svg>
+      Queue
+    </a>
+  </nav>
+  <div class="sidebar-status" id="sidebarStatus">
+    <div class="status-dot" id="statusDot"></div>
+    <span id="statusLabel">Checking...</span>
+  </div>
+</aside>
+
+<!-- ── MAIN ───────────────────────────────────────────────── -->
+<main class="main">
+
+  <!-- HEADER -->
+  <header class="topbar">
+    <button class="menu-toggle" id="menuToggle">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
+    <h1 class="topbar-title" id="viewTitle">Products</h1>
+    <div class="topbar-actions">
+      <button class="btn btn-primary" id="addProductBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Add Product
+      </button>
+    </div>
+  </header>
+
+  <!-- VIEWS -->
+  <div class="view active" id="view-products">
+    <div class="view-content">
+      <div class="products-grid" id="productsGrid">
+        <div class="empty-state" id="productsEmpty">
+          <div class="empty-icon">✨</div>
+          <h3>No products yet</h3>
+          <p>Add your first product to generate content.</p>
+          <button class="btn btn-primary" onclick="openAddProduct()">Add Product</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="view" id="view-schedule">
+    <div class="view-content">
+      <div class="schedule-header">
+        <button class="btn btn-ghost" id="prevWeek">‹ Prev</button>
+        <h2 id="weekLabel">This week</h2>
+        <button class="btn btn-ghost" id="nextWeek">Next ›</button>
+      </div>
+      <div class="calendar-grid" id="calendarGrid"></div>
+    </div>
+  </div>
+
+  <div class="view" id="view-queue">
+    <div class="view-content">
+      <div class="queue-header">
+        <h2>Scheduled Posts</h2>
+        <span class="badge" id="queueCount">0</span>
+      </div>
+      <div class="queue-list" id="queueList">
+        <div class="empty-state">
+          <div class="empty-icon">📋</div>
+          <h3>No posts scheduled</h3>
+          <p>Open a product and click "Schedule Post" to queue content.</p>
+        </div>
+      </div>
+      <div class="queue-header" style="margin-top:2rem">
+        <h2>TikTok Drafts</h2>
+      </div>
+      <div class="queue-list" id="tiktokList">
+        <div class="empty-state">
+          <div class="empty-icon">🎵</div>
+          <h3>No TikTok drafts</h3>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<!-- ── ADD PRODUCT MODAL ──────────────────────────────────── -->
+<div class="modal-overlay" id="addModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Add New Product</h2>
+      <button class="modal-close" id="closeAddModal">✕</button>
+    </div>
+    <form id="addProductForm" class="modal-body">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Product Name *</label>
+          <input type="text" name="name" placeholder="e.g. Meadow Linen Playsuit" required>
+        </div>
+        <div class="form-group form-group--sm">
+          <label>Price (R) *</label>
+          <input type="number" name="price" placeholder="349" required min="1">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Age Range *</label>
+          <select name="ageRange" required>
+            <option value="">Select age range</option>
+            <option value="0-2">0–2 years</option>
+            <option value="2-5">2–5 years</option>
+            <option value="3-6">3–6 years</option>
+            <option value="4-7">4–7 years</option>
+            <option value="7-12">7–12 years</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Season</label>
+          <select name="season">
+            <option value="summer">Summer</option>
+            <option value="winter">Winter</option>
+            <option value="spring">Spring</option>
+            <option value="autumn">Autumn</option>
+            <option value="all-season">All season</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Colours (comma separated)</label>
+        <input type="text" name="colours" placeholder="sage, white, blush">
+      </div>
+      <div class="form-group">
+        <label>Description / Material Details</label>
+        <textarea name="description" rows="3" placeholder="100% linen, button front, adjustable straps, machine washable..."></textarea>
+      </div>
+      <div class="form-group">
+        <label>Supplier Image URLs (comma separated)</label>
+        <textarea name="imageUrls" rows="2" placeholder="https://example.com/img1.jpg, https://example.com/img2.jpg"></textarea>
+        <span class="form-hint">Leave blank to generate content without images.</span>
+      </div>
+    </form>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" id="cancelAddModal">Cancel</button>
+      <button class="btn btn-primary" id="submitProduct">Generate Content</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── PROGRESS MODAL ─────────────────────────────────────── -->
+<div class="modal-overlay" id="progressModal">
+  <div class="modal modal--narrow">
+    <div class="modal-header">
+      <h2 id="progressTitle">Generating Content...</h2>
+    </div>
+    <div class="modal-body">
+      <div class="progress-steps" id="progressSteps"></div>
+      <div class="progress-bar-wrap">
+        <div class="progress-bar" id="progressBar" style="width:0%"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── PRODUCT DETAIL MODAL ───────────────────────────────── -->
+<div class="modal-overlay modal-overlay--full" id="productModal">
+  <div class="modal modal--full">
+    <div class="modal-header">
+      <div>
+        <h2 id="productModalTitle"></h2>
+        <p class="modal-subtitle" id="productModalSubtitle"></p>
+      </div>
+      <div class="modal-header-actions">
+        <button class="btn btn-secondary" id="scheduleFromModal">📅 Schedule Post</button>
+        <button class="modal-close" id="closeProductModal">✕</button>
+      </div>
+    </div>
+
+    <!-- PRODUCT IMAGE STRIP -->
+    <div class="product-images" id="productImages"></div>
+
+    <!-- TABS -->
+    <div class="tabs" id="contentTabs">
+      <button class="tab active" data-tab="shopify">Shopify</button>
+      <button class="tab" data-tab="instagram">Instagram</button>
+      <button class="tab" data-tab="tiktok">TikTok</button>
+      <button class="tab" data-tab="pinterest">Pinterest</button>
+      <button class="tab" data-tab="facebook">Facebook</button>
+      <button class="tab" data-tab="email">Email</button>
+      <button class="tab" data-tab="video">Video Prompts</button>
+      <button class="tab" data-tab="capcut">CapCut Brief</button>
+    </div>
+
+    <div class="tab-content" id="tabContent"></div>
+  </div>
+</div>
+
+<!-- ── SCHEDULE MODAL ─────────────────────────────────────── -->
+<div class="modal-overlay" id="scheduleModal">
+  <div class="modal modal--narrow">
+    <div class="modal-header">
+      <h2>Schedule Post</h2>
+      <button class="modal-close" id="closeScheduleModal">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Platform</label>
+        <select id="schedulePlatform">
+          <option value="instagram">Instagram (Feed)</option>
+          <option value="instagram_reels">Instagram (Reels)</option>
+          <option value="instagram_stories">Instagram (Stories)</option>
+          <option value="facebook">Facebook</option>
+          <option value="tiktok">TikTok</option>
+          <option value="pinterest">Pinterest</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Caption Variant</label>
+        <select id="scheduleCaptionVariant">
+          <option value="feature">Feature (direct, product-led)</option>
+          <option value="story">Story (emotional, moment-based)</option>
+          <option value="ugc">UGC (real mum voice)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Date & Time (SAST)</label>
+        <input type="datetime-local" id="scheduleDateTime">
+      </div>
+      <div class="schedule-time-suggestions">
+        <p class="form-hint">Best times for your audience:</p>
+        <div class="time-chips" id="timeChips"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" id="cancelScheduleModal">Cancel</button>
+      <button class="btn btn-primary" id="confirmSchedule">Add to Queue</button>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

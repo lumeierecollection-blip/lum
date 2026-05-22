@@ -1,10 +1,11 @@
 /**
  * Lumière Collection — Content Generator
- * Generates all copy via Claude API with brand voice validation and auto-retry.
+ * Generates all copy via free AI provider (Groq/Gemini/OpenRouter/Ollama).
+ * No API cost. Brand voice validation with auto-retry built in.
  */
 
-import Anthropic from '@anthropic-ai/sdk';
 import brand from '../config/brand.js';
+import { callAI } from '../config/ai-provider.js';
 import {
   BRAND_SYSTEM_PROMPT,
   shopifyProductTitle,
@@ -23,48 +24,20 @@ import logger from '../utils/logger.js';
 
 const MAX_RETRIES = 2;
 
-let _client = null;
-
-function getClient() {
-  if (!_client) {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    const authToken = process.env.ANTHROPIC_AUTH_TOKEN;
-
-    if (!apiKey && !authToken) {
-      throw new Error('ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN is not set in .env');
-    }
-
-    // ANTHROPIC_AUTH_TOKEN (Bearer) takes precedence if set;
-    // ANTHROPIC_API_KEY is for standard sk-ant-api- keys.
-    // The SDK auto-reads both env vars — instantiating with no options works.
-    _client = new Anthropic();
-  }
-  return _client;
-}
-
 /**
- * Call Claude API with the brand system prompt.
+ * Call the AI provider with the brand system prompt.
  * @param {string} userPrompt
  * @param {number} maxTokens
- * @returns {Promise<string>} Raw text response
+ * @returns {Promise<string>}
  */
-async function callClaude(userPrompt, maxTokens = 1024) {
-  const client = getClient();
-
-  const message = await client.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: maxTokens,
-    system: BRAND_SYSTEM_PROMPT,
-    messages: [{ role: 'user', content: userPrompt }],
-  });
-
-  return message.content[0].type === 'text' ? message.content[0].text : '';
+async function callWithBrandPrompt(userPrompt, maxTokens = 1024) {
+  return callAI(BRAND_SYSTEM_PROMPT, userPrompt, maxTokens);
 }
 
 /**
  * Scan text for forbidden brand words.
  * @param {string} text
- * @returns {string[]} Array of found forbidden words
+ * @returns {string[]}
  */
 function findForbiddenWords(text) {
   const lowerText = text.toLowerCase();
@@ -72,14 +45,14 @@ function findForbiddenWords(text) {
 }
 
 /**
- * Call Claude and auto-retry if forbidden words are found.
+ * Call AI and auto-retry if forbidden words are found in the output.
  * @param {string} userPrompt
  * @param {number} maxTokens
- * @param {string} fieldName - For logging
+ * @param {string} fieldName
  * @returns {Promise<string>}
  */
-async function callClaudeWithBrandCheck(userPrompt, maxTokens = 1024, fieldName = 'copy') {
-  let result = await callClaude(userPrompt, maxTokens);
+async function callWithBrandCheck(userPrompt, maxTokens = 1024, fieldName = 'copy') {
+  let result = await callWithBrandPrompt(userPrompt, maxTokens);
   let violations = findForbiddenWords(result);
 
   let attempt = 0;
@@ -87,15 +60,15 @@ async function callClaudeWithBrandCheck(userPrompt, maxTokens = 1024, fieldName 
     attempt++;
     violations.forEach((w) => logger.brandViolation(w, attempt));
 
-    const correctionPrompt = `The following copy contains forbidden words that make it sound AI-generated: ${violations.map((w) => `"${w}"`).join(', ')}.
+    const correctionPrompt = `The copy below contains these forbidden words that make it sound AI-generated: ${violations.map((w) => `"${w}"`).join(', ')}.
 
-Rewrite the following copy removing those words entirely and replacing with natural, human language:
+Rewrite it, removing those words entirely and replacing with natural human language:
 
 ${result}
 
-Do NOT use any of these words: ${violations.join(', ')}`;
+Return only the rewritten copy. No preamble.`;
 
-    result = await callClaude(correctionPrompt, maxTokens);
+    result = await callWithBrandPrompt(correctionPrompt, maxTokens);
     violations = findForbiddenWords(result);
   }
 
@@ -109,29 +82,30 @@ Do NOT use any of these words: ${violations.join(', ')}`;
 }
 
 /**
- * Parse JSON from Claude response, stripping any accidental markdown fences.
+ * Parse JSON from AI response, stripping accidental markdown fences.
  * @param {string} text
  * @returns {object}
  */
 function parseJsonResponse(text) {
-  // Strip markdown code fences if present
-  const cleaned = text.replace(/^```json?\n?/i, '').replace(/\n?```$/i, '').trim();
+  const cleaned = text.replace(/^```json?\n?/im, '').replace(/\n?```$/im, '').trim();
+  // Find the first { or [ and parse from there
+  const jsonStart = cleaned.search(/[{[]/);
+  if (jsonStart > 0) return JSON.parse(cleaned.slice(jsonStart));
   return JSON.parse(cleaned);
 }
 
-/**
- * Generate complete Shopify copy pack.
- * @param {object} product
- * @returns {Promise<object>}
- */
+// ─────────────────────────────────────────────────────────────
+// SECTION GENERATORS
+// ─────────────────────────────────────────────────────────────
+
 async function generateShopifyCopy(product) {
   logger.step('Shopify copy...');
 
   const [title, description, bulletsRaw, metaRaw] = await Promise.all([
-    callClaudeWithBrandCheck(shopifyProductTitle(product.name, product.ageRange), 128, 'shopify title'),
-    callClaudeWithBrandCheck(shopifyDescription(product), 256, 'shopify description'),
-    callClaudeWithBrandCheck(shopifyBulletPoints(product), 512, 'shopify bullets'),
-    callClaude(shopifyMetaTags(product), 512),
+    callWithBrandCheck(shopifyProductTitle(product.name, product.ageRange), 128, 'shopify title'),
+    callWithBrandCheck(shopifyDescription(product), 256, 'shopify description'),
+    callWithBrandCheck(shopifyBulletPoints(product), 512, 'shopify bullets'),
+    callWithBrandPrompt(shopifyMetaTags(product), 512),
   ]);
 
   let bullets = [];
@@ -149,10 +123,9 @@ async function generateShopifyCopy(product) {
     logger.warn('Could not parse Shopify meta tags JSON — using defaults');
   }
 
-  // Generate alt texts for up to 4 images
   const altTexts = await Promise.all(
     ['hero', 'detail-1', 'detail-2', 'detail-3'].map((label) =>
-      callClaude(productAltText(product, label), 128)
+      callWithBrandPrompt(productAltText(product, label), 128)
     )
   );
 
@@ -167,19 +140,14 @@ async function generateShopifyCopy(product) {
   };
 }
 
-/**
- * Generate Instagram content.
- * @param {object} product
- * @returns {Promise<object>}
- */
 async function generateInstagramCopy(product) {
   logger.step('Instagram captions...');
 
   const [captionStory, captionFeature, captionUGC, hashtags] = await Promise.all([
-    callClaudeWithBrandCheck(instagramCaption(product, 'story'), 256, 'instagram story'),
-    callClaudeWithBrandCheck(instagramCaption(product, 'feature'), 256, 'instagram feature'),
-    callClaudeWithBrandCheck(instagramCaption(product, 'ugc'), 256, 'instagram ugc'),
-    callClaude(instagramHashtags(product, product.season), 256),
+    callWithBrandCheck(instagramCaption(product, 'story'), 256, 'instagram story'),
+    callWithBrandCheck(instagramCaption(product, 'feature'), 256, 'instagram feature'),
+    callWithBrandCheck(instagramCaption(product, 'ugc'), 256, 'instagram ugc'),
+    callWithBrandPrompt(instagramHashtags(product, product.season), 256),
   ]);
 
   return {
@@ -190,76 +158,42 @@ async function generateInstagramCopy(product) {
   };
 }
 
-/**
- * Generate TikTok content.
- * @param {object} product
- * @returns {Promise<object>}
- */
 async function generateTikTokCopy(product) {
   logger.step('TikTok script...');
-
-  const raw = await callClaudeWithBrandCheck(tiktokScript(product), 1024, 'tiktok script');
+  const raw = await callWithBrandCheck(tiktokScript(product), 1024, 'tiktok');
 
   try {
-    const parsed = parseJsonResponse(raw);
-    return parsed;
+    return parseJsonResponse(raw);
   } catch {
-    logger.warn('Could not parse TikTok JSON — using raw text');
-    return {
-      hook: '',
-      script: raw,
-      onScreenText: [],
-      hashtags: '',
-      soundMood: '',
-    };
+    return { hook: '', script: raw, onScreenText: [], hashtags: '', soundMood: '' };
   }
 }
 
-/**
- * Generate Pinterest content.
- * @param {object} product
- * @returns {Promise<object>}
- */
 async function generatePinterestCopy(product) {
   logger.step('Pinterest pins...');
-
-  const raw = await callClaudeWithBrandCheck(pinterestPin(product), 512, 'pinterest');
+  const raw = await callWithBrandCheck(pinterestPin(product), 512, 'pinterest');
 
   try {
-    const parsed = parseJsonResponse(raw);
-    return parsed;
+    return parseJsonResponse(raw);
   } catch {
     return { pinTitle: product.name, pinDescription: '', boardSuggestion: 'New Arrivals' };
   }
 }
 
-/**
- * Generate Facebook content.
- * @param {object} product
- * @returns {Promise<object>}
- */
 async function generateFacebookCopy(product) {
   logger.step('Facebook caption...');
-
-  const raw = await callClaudeWithBrandCheck(facebookCaption(product), 512, 'facebook');
+  const raw = await callWithBrandCheck(facebookCaption(product), 512, 'facebook');
 
   try {
-    const parsed = parseJsonResponse(raw);
-    return parsed;
+    return parseJsonResponse(raw);
   } catch {
     return { caption: raw, hashtags: '#lumierecollection #kidsfashion' };
   }
 }
 
-/**
- * Generate email subject lines.
- * @param {object} product
- * @returns {Promise<object>}
- */
 async function generateEmailCopy(product) {
   logger.step('Email subjects...');
-
-  const raw = await callClaude(emailSubjectLines(product), 256);
+  const raw = await callWithBrandPrompt(emailSubjectLines(product), 256);
 
   try {
     return parseJsonResponse(raw);
@@ -270,34 +204,32 @@ async function generateEmailCopy(product) {
 
 /**
  * Generate the full content pack for a product.
- * This is the main export — all copy in one structured object.
+ * All AI calls run in parallel per section for speed.
  * @param {object} product
- * @returns {Promise<object>} Complete content pack
+ * @param {Function} [onProgress] - optional callback(step, message)
+ * @returns {Promise<object>}
  */
-export async function generateFullContentPack(product) {
-  logger.step('Generating content pack (Claude API)...');
+export async function generateFullContentPack(product, onProgress) {
+  const notify = onProgress || (() => {});
+
+  notify('start', 'Starting content generation...');
 
   const [shopify, instagram, tiktok, pinterest, facebook, email] = await Promise.all([
-    generateShopifyCopy(product),
-    generateInstagramCopy(product),
-    generateTikTokCopy(product),
-    generatePinterestCopy(product),
-    generateFacebookCopy(product),
-    generateEmailCopy(product),
+    generateShopifyCopy(product).then((r) => { notify('shopify', 'Shopify copy done'); return r; }),
+    generateInstagramCopy(product).then((r) => { notify('instagram', 'Instagram captions done'); return r; }),
+    generateTikTokCopy(product).then((r) => { notify('tiktok', 'TikTok script done'); return r; }),
+    generatePinterestCopy(product).then((r) => { notify('pinterest', 'Pinterest pins done'); return r; }),
+    generateFacebookCopy(product).then((r) => { notify('facebook', 'Facebook caption done'); return r; }),
+    generateEmailCopy(product).then((r) => { notify('email', 'Email subjects done'); return r; }),
   ]);
 
-  return {
-    shopify,
-    instagram,
-    tiktok,
-    pinterest,
-    facebook,
-    email,
-  };
+  notify('complete', 'Content pack complete');
+
+  return { shopify, instagram, tiktok, pinterest, facebook, email };
 }
 
 /**
- * Regenerate just the copy for an existing product (no image processing).
+ * Regenerate copy only for an existing product.
  * @param {object} product
  * @returns {Promise<object>}
  */

@@ -6,6 +6,7 @@
   "main": "lumiere.js",
   "scripts": {
     "start": "node lumiere.js wizard",
+    "web": "node server.js",
     "status": "node lumiere.js status",
     "calendar": "node lumiere.js calendar --week current"
   },
@@ -13,14 +14,16 @@
     "@anthropic-ai/sdk": "latest",
     "chalk": "^5.3.0",
     "commander": "^12.0.0",
+    "date-fns": "^3.6.0",
+    "date-fns-tz": "^3.1.0",
     "dotenv": "^16.4.0",
+    "express": "^5.2.1",
+    "groq-sdk": "^1.2.0",
     "inquirer": "^9.2.0",
-    "node-fetch": "^3.3.0",
     "node-cron": "^3.0.0",
+    "node-fetch": "^3.3.0",
     "ora": "^8.0.0",
     "sharp": "^0.33.0",
-    "slugify": "^1.6.0",
-    "date-fns": "^3.6.0",
-    "date-fns-tz": "^3.1.0"
+    "slugify": "^1.6.0"
   }
 }
