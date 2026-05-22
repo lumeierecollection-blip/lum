@@ -1,6 +1,6 @@
 /* ──────────────────────────────────────────────────────────
-   LUMIÈRE COLLECTION — Dashboard App
-   Vanilla JS SPA — no framework, fast, simple
+   LUMIÈRE COLLECTION — Mobile-First SPA
+   Vanilla JS, ES6+, no framework
    ────────────────────────────────────────────────────────── */
 
 'use strict';
@@ -11,56 +11,143 @@
 
 const state = {
   products: [],
-  currentProduct: null,
+  status: null,
   currentSlug: null,
+  currentProduct: null,
   currentContentPack: null,
-  calendarOffset: 0,  // weeks from current
+  currentPlatform: 'instagram',
+  selectedDay: null,          // Date object for schedule view
   queue: { scheduled: [], tiktokDrafts: [] },
+  addStep: 0,
 };
 
 // ─────────────────────────────────────────────────────────────
 // DOM HELPERS
 // ─────────────────────────────────────────────────────────────
 
-const $ = (sel, el = document) => el.querySelector(sel);
-const $$ = (sel, el = document) => [...el.querySelectorAll(sel)];
+const $ = (sel, root = document) => root.querySelector(sel);
+const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
-function el(tag, cls, content) {
+function mk(tag, cls, html) {
   const e = document.createElement(tag);
   if (cls) e.className = cls;
-  if (content !== undefined) e.innerHTML = content;
+  if (html !== undefined) e.innerHTML = html;
   return e;
 }
 
-function copyToClipboard(text, btn) {
-  navigator.clipboard.writeText(text).then(() => {
-    btn.textContent = 'Copied!';
-    btn.classList.add('copied');
-    setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1500);
-  });
+// ─────────────────────────────────────────────────────────────
+// TOAST
+// ─────────────────────────────────────────────────────────────
+
+let toastTimer = null;
+function showToast(msg, duration = 2400) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), duration);
 }
 
+// ─────────────────────────────────────────────────────────────
+// COPY TO CLIPBOARD
+// ─────────────────────────────────────────────────────────────
+
+function copyText(text, btn) {
+  navigator.clipboard.writeText(text).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = 'Copied ✓';
+    btn.classList.add('copied');
+    setTimeout(() => {
+      btn.textContent = orig;
+      btn.classList.remove('copied');
+    }, 2000);
+  }).catch(() => showToast('Copy failed — try long-pressing'));
+}
+
+// Build a copy block: text + full-width copy button
 function copyBlock(text) {
-  const wrap = el('div', 'content-block');
-  wrap.appendChild(document.createTextNode(text));
-  const btn = el('button', 'copy-btn', 'Copy');
-  btn.onclick = () => copyToClipboard(text, btn);
+  const wrap = mk('div', 'copy-block');
+  const pre = mk('div', 'copy-block-inner');
+  pre.textContent = text;
+  const btn = mk('button', 'copy-btn', 'Copy');
+  btn.onclick = () => copyText(text, btn);
+  wrap.appendChild(pre);
   wrap.appendChild(btn);
   return wrap;
 }
 
-function formatDate(iso) {
+// Section container
+function section(title) {
+  const s = mk('div', 'content-section');
+  if (title) {
+    const h = mk('div', 'content-section-title', title);
+    s.appendChild(h);
+  }
+  return s;
+}
+
+// ─────────────────────────────────────────────────────────────
+// DATE / FORMAT HELPERS
+// ─────────────────────────────────────────────────────────────
+
+function fmtDate(iso) {
+  if (!iso) return '';
   return new Date(iso).toLocaleDateString('en-ZA', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
-function formatDateTime(iso) {
+function fmtDateTime(iso) {
+  if (!iso) return '';
   return new Date(iso).toLocaleString('en-ZA', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
+function fmtTime(iso) {
+  if (!iso) return '';
+  return new Date(iso).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' });
+}
+
 function platformEmoji(p) {
-  const m = { instagram: '📸', instagram_reels: '🎬', instagram_stories: '⭕', facebook: '💙', tiktok: '🎵', pinterest: '📌' };
+  const m = {
+    instagram: '📸', tiktok: '🎵', pinterest: '📌',
+    shopify: '🛍️', facebook: '💙', email: '✉️',
+    video: '🎬', capcut: '✂️',
+  };
   return m[p] || '📋';
 }
+
+// ─────────────────────────────────────────────────────────────
+// SHEET / OVERLAY MANAGEMENT
+// ─────────────────────────────────────────────────────────────
+
+let openSheets = [];
+
+function openSheet(sheetId) {
+  const sheet = $(`#${sheetId}`);
+  const overlay = $('#sheetOverlay');
+  if (!sheet) return;
+  sheet.classList.add('open');
+  overlay.classList.add('active');
+  if (!openSheets.includes(sheetId)) openSheets.push(sheetId);
+}
+
+function closeSheet(sheetId) {
+  const sheet = $(`#${sheetId}`);
+  if (!sheet) return;
+  sheet.classList.remove('open');
+  openSheets = openSheets.filter(id => id !== sheetId);
+  if (openSheets.length === 0) {
+    $('#sheetOverlay').classList.remove('active');
+  }
+}
+
+function closeAllSheets() {
+  openSheets.slice().forEach(id => closeSheet(id));
+}
+
+// Overlay tap closes topmost sheet
+$('#sheetOverlay').addEventListener('click', () => {
+  const top = openSheets[openSheets.length - 1];
+  if (top) closeSheet(top);
+});
 
 // ─────────────────────────────────────────────────────────────
 // NAVIGATION
@@ -68,31 +155,30 @@ function platformEmoji(p) {
 
 function switchView(viewName) {
   $$('.view').forEach(v => v.classList.remove('active'));
-  $$('.nav-item').forEach(n => n.classList.remove('active'));
+  $$('.bnav-item').forEach(n => n.classList.remove('active'));
 
   const view = $(`#view-${viewName}`);
-  const nav  = $(`[data-view="${viewName}"]`);
+  const navBtn = $(`.bnav-item[data-view="${viewName}"]`);
   if (view) view.classList.add('active');
-  if (nav)  nav.classList.add('active');
+  if (navBtn) navBtn.classList.add('active');
 
-  const titles = { products: 'Products', schedule: 'Schedule', queue: 'Queue' };
-  $('#viewTitle').textContent = titles[viewName] || viewName;
-
-  if (viewName === 'schedule') renderCalendar();
+  if (viewName === 'schedule') renderScheduleView();
   if (viewName === 'queue')    loadQueue();
+  if (viewName === 'settings') renderSettings();
 }
 
-$$('.nav-item').forEach(item => {
-  item.addEventListener('click', e => {
-    e.preventDefault();
-    switchView(item.dataset.view);
-    closeSidebar();
-  });
+$$('.bnav-item').forEach(item => {
+  item.addEventListener('click', () => switchView(item.dataset.view));
 });
 
-// Mobile sidebar
-$('#menuToggle').addEventListener('click', () => $('#sidebar').classList.toggle('open'));
-function closeSidebar() { $('#sidebar').classList.remove('open'); }
+// ─────────────────────────────────────────────────────────────
+// FAB — opens Add Product sheet
+// ─────────────────────────────────────────────────────────────
+
+$('#fab').addEventListener('click', () => {
+  resetAddForm();
+  openSheet('addSheet');
+});
 
 // ─────────────────────────────────────────────────────────────
 // STATUS CHECK
@@ -101,20 +187,9 @@ function closeSidebar() { $('#sidebar').classList.remove('open'); }
 async function checkStatus() {
   try {
     const r = await fetch('/api/status');
-    const s = await r.json();
-    const dot   = $('#statusDot');
-    const label = $('#statusLabel');
-
-    if (s.ready) {
-      dot.className = 'status-dot ok';
-      label.textContent = `${s.ai.provider} / free`;
-    } else {
-      dot.className = 'status-dot warn';
-      label.textContent = 'No AI key set';
-    }
+    state.status = await r.json();
   } catch {
-    $('#statusDot').className = 'status-dot';
-    $('#statusLabel').textContent = 'Server offline';
+    state.status = null;
   }
 }
 
@@ -131,146 +206,241 @@ async function loadProducts() {
     const r = await fetch('/api/products');
     state.products = await r.json();
 
-    if (state.products.length === 0) {
+    if (!Array.isArray(state.products) || state.products.length === 0) {
       grid.appendChild(empty);
       return;
     }
 
     state.products.forEach(p => grid.appendChild(buildProductCard(p)));
   } catch {
-    grid.innerHTML = '<p style="color:var(--error);padding:20px">Could not load products — is the server running?</p>';
+    grid.innerHTML = '<p style="color:var(--error);padding:24px;grid-column:1/-1">Could not load products — is the server running?</p>';
   }
 }
 
 function buildProductCard(p) {
-  const card = el('div', 'product-card');
+  const card = mk('div', 'product-card');
 
-  const imageDiv = el('div', 'card-image');
+  // Image area
+  const imgDiv = mk('div', 'card-image');
   if (p.heroImage) {
     const img = new Image();
     img.src = p.heroImage;
     img.alt = p.name;
-    imageDiv.appendChild(img);
+    imgDiv.appendChild(img);
   } else {
-    imageDiv.appendChild(el('div', 'card-image-placeholder', '👗'));
+    imgDiv.appendChild(mk('div', 'card-image-placeholder', '👗'));
   }
-  card.appendChild(imageDiv);
+  card.appendChild(imgDiv);
 
-  const body = el('div', 'card-body');
-  body.appendChild(el('div', 'card-name', p.name));
-  body.appendChild(el('div', 'card-meta', `Ages ${p.ageRange} · R${p.price} · ${p.season}`));
+  // Body
+  const body = mk('div', 'card-body');
+  body.appendChild(mk('div', 'card-name', escHtml(p.name)));
 
-  const badges = el('div', 'card-badges');
-  if (p.hasContent) badges.appendChild(el('span', 'badge badge-success', '✓ Copy'));
-  if (p.hasVideo)   badges.appendChild(el('span', 'badge badge-gold', '🎬 Prompts'));
-  const colourBadge = Array.isArray(p.colours) ? p.colours.slice(0,2).join(', ') : p.colours;
-  if (colourBadge) badges.appendChild(el('span', 'badge badge-blush', colourBadge));
-  body.appendChild(badges);
+  const ageStr = p.ageRange ? `Ages ${p.ageRange}` : '';
+  const priceStr = p.price ? `R${p.price}` : '';
+  const seasonStr = p.season || '';
+  const meta = [ageStr, priceStr, seasonStr].filter(Boolean).join(' · ');
+  body.appendChild(mk('div', 'card-meta', meta));
+
+  // Actions
+  const actions = mk('div', 'card-actions');
+  const viewBtn = mk('button', 'card-view-btn', 'View Content');
+  viewBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openContentSheet(p.slug);
+  });
+
+  const schedBtn = mk('button', 'card-sched-btn', '📅');
+  schedBtn.title = 'Schedule post';
+  schedBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    state.currentSlug = p.slug;
+    openScheduleSheet();
+  });
+
+  actions.appendChild(viewBtn);
+  actions.appendChild(schedBtn);
+  body.appendChild(actions);
   card.appendChild(body);
 
-  card.addEventListener('click', () => openProductModal(p.slug));
   return card;
 }
 
+function escHtml(str) {
+  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
 // ─────────────────────────────────────────────────────────────
-// ADD PRODUCT
+// ADD PRODUCT MULTI-STEP FORM
 // ─────────────────────────────────────────────────────────────
 
-window.openAddProduct = function() { $('#addModal').classList.add('open'); };
+function resetAddForm() {
+  state.addStep = 0;
+  $('#fieldName').value = '';
+  $('#fieldPrice').value = '';
+  $('#fieldAgeRange').value = '';
+  $('#fieldSeason').value = 'all-season';
+  $('#fieldColours').value = '';
+  $('#fieldDescription').value = '';
+  $('#fieldImageUrls').value = '';
 
-$('#addProductBtn').addEventListener('click', openAddProduct);
-$('#closeAddModal').addEventListener('click', () => $('#addModal').classList.remove('open'));
-$('#cancelAddModal').addEventListener('click', () => $('#addModal').classList.remove('open'));
+  // Reset pills
+  $$('#ageRangePills .pill').forEach(p => p.classList.remove('active'));
+  $$('#seasonPills .pill').forEach(p => p.classList.remove('active'));
+  $('#seasonPills .pill[data-value="all-season"]').classList.add('active');
 
-$('#submitProduct').addEventListener('click', async () => {
-  const form = $('#addProductForm');
-  if (!form.reportValidity()) return;
+  showAddStep(0);
+}
 
-  const data = Object.fromEntries(new FormData(form));
-  $('#addModal').classList.remove('open');
-  form.reset();
+function showAddStep(step) {
+  state.addStep = step;
+  $$('.add-step').forEach((el, i) => el.classList.toggle('active', i === step));
+  $$('.step-dot').forEach((dot, i) => {
+    dot.classList.toggle('active', i === step);
+    dot.classList.toggle('done', i < step);
+  });
+  $('#addStepLabel').textContent = `Step ${step + 1} of 3`;
+  $('#addStepBack').style.display = step === 0 ? 'none' : '';
+  $('#addStepNext').textContent = step === 2 ? 'Generate ✨' : 'Next';
+}
 
-  await startProductGeneration(data);
+// Pill selectors
+function initPillGroup(groupId, hiddenId) {
+  const container = $(`#${groupId}`);
+  if (!container) return;
+  container.addEventListener('click', e => {
+    const btn = e.target.closest('.pill');
+    if (!btn) return;
+    $$('.pill', container).forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    if (hiddenId) $(`#${hiddenId}`).value = btn.dataset.value;
+  });
+}
+
+initPillGroup('ageRangePills', 'fieldAgeRange');
+initPillGroup('seasonPills', 'fieldSeason');
+
+$('#addSheetClose').addEventListener('click', () => closeSheet('addSheet'));
+
+$('#addStepBack').addEventListener('click', () => {
+  if (state.addStep > 0) showAddStep(state.addStep - 1);
 });
 
+$('#addStepNext').addEventListener('click', async () => {
+  if (state.addStep === 0) {
+    if (!$('#fieldName').value.trim()) { showToast('Please enter a product name'); return; }
+    if (!$('#fieldPrice').value) { showToast('Please enter a price'); return; }
+    if (!$('#fieldAgeRange').value) { showToast('Please select an age range'); return; }
+    showAddStep(1);
+  } else if (state.addStep === 1) {
+    showAddStep(2);
+  } else {
+    // Submit
+    const data = {
+      name: $('#fieldName').value.trim(),
+      price: $('#fieldPrice').value,
+      ageRange: $('#fieldAgeRange').value,
+      season: $('#fieldSeason').value || 'all-season',
+      colours: $('#fieldColours').value,
+      description: $('#fieldDescription').value,
+      imageUrls: $('#fieldImageUrls').value,
+    };
+    closeSheet('addSheet');
+    await startProductGeneration(data);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// PRODUCT GENERATION (SSE)
+// ─────────────────────────────────────────────────────────────
+
+const GENERATION_STEPS = [
+  { key: 'images',   icon: '🖼️',  label: 'Downloading & enhancing images' },
+  { key: 'video',    icon: '🎬',  label: 'Generating video prompts' },
+  { key: 'copy',     icon: '✍️',  label: 'Writing all copy (Groq AI)' },
+  { key: 'shopify',  icon: '🛍️', label: 'Shopify product listing' },
+  { key: 'instagram',icon: '📸', label: 'Instagram captions' },
+  { key: 'tiktok',   icon: '🎵', label: 'TikTok script & hook' },
+  { key: 'pinterest',icon: '📌', label: 'Pinterest pins' },
+  { key: 'facebook', icon: '💙', label: 'Facebook caption' },
+  { key: 'email',    icon: '✉️',  label: 'Email subject lines' },
+  { key: 'capcut',   icon: '✂️',  label: 'CapCut edit brief' },
+  { key: 'package',  icon: '📦', label: 'Assembling content package' },
+  { key: 'tiktok_draft', icon: '📁', label: 'Saving TikTok draft' },
+];
+
 async function startProductGeneration(formData) {
-  const progressModal = $('#progressModal');
-  const stepsEl = $('#progressSteps');
-  const bar = $('#progressBar');
-  const title = $('#progressTitle');
+  const overlay = $('#progressOverlay');
+  const fill    = $('#progressTopFill');
+  const nameEl  = $('#progressProductName');
+  const list    = $('#progressStepsList');
 
-  const steps = [
-    { key: 'images',   label: 'Downloading & enhancing images' },
-    { key: 'video',    label: 'Generating video prompts' },
-    { key: 'shopify',  label: 'Shopify copy' },
-    { key: 'instagram',label: 'Instagram captions' },
-    { key: 'tiktok',   label: 'TikTok script' },
-    { key: 'pinterest',label: 'Pinterest pins' },
-    { key: 'facebook', label: 'Facebook caption' },
-    { key: 'email',    label: 'Email subjects' },
-    { key: 'capcut',   label: 'CapCut edit brief' },
-    { key: 'package',  label: 'Assembling package' },
-    { key: 'tiktok_draft', label: 'Saving TikTok draft' },
-  ];
+  // Build step UI
+  list.innerHTML = '';
+  fill.style.width = '0%';
+  nameEl.textContent = `Generating: ${formData.name}`;
+  overlay.classList.add('active');
 
-  // Build step elements
-  stepsEl.innerHTML = '';
   const stepEls = {};
-  steps.forEach(s => {
-    const row = el('div', 'progress-step');
-    const icon = el('div', 'step-icon', '·');
-    const lbl = el('span', '', s.label);
+  GENERATION_STEPS.forEach(s => {
+    const row  = mk('div', 'progress-step');
+    const icon = mk('div', 'step-icon', s.icon);
+    const lbl  = mk('span', '', s.label);
     row.appendChild(icon);
     row.appendChild(lbl);
-    stepsEl.appendChild(row);
+    list.appendChild(row);
     stepEls[s.key] = { row, icon, lbl };
   });
 
-  bar.style.width = '0%';
-  title.textContent = `Generating: ${formData.name}`;
-  progressModal.classList.add('open');
-
   let doneCount = 0;
 
-  function markStep(key, done, error) {
-    const s = stepEls[key];
-    if (!s) return;
-    $$('.progress-step.active', stepsEl).forEach(el => {
-      if (!el.classList.contains('done')) el.classList.remove('active');
-    });
-    if (done) {
-      s.row.classList.add('done'); s.row.classList.remove('active');
-      s.icon.textContent = '✓';
-      doneCount++;
-    } else if (error) {
-      s.row.classList.add('error'); s.icon.textContent = '✗';
-    } else {
-      s.row.classList.add('active');
-      s.icon.textContent = '⟳';
-    }
-    bar.style.width = `${Math.round((doneCount / steps.length) * 100)}%`;
+  function activate(key) {
+    const s = stepEls[key]; if (!s) return;
+    // de-activate previous active
+    $$('.progress-step.active', list).forEach(r => r.classList.remove('active'));
+    s.row.classList.add('active');
+    s.icon.textContent = '⟳';
   }
 
-  try {
-    const body = {
-      name: formData.name,
-      price: formData.price,
-      ageRange: formData.ageRange,
-      season: formData.season,
-      colours: formData.colours,
-      description: formData.description,
-      imageUrls: formData.imageUrls || '',
-    };
+  function markDone(key) {
+    const s = stepEls[key]; if (!s) return;
+    if (s.row.classList.contains('done')) return;
+    s.row.classList.remove('active');
+    s.row.classList.add('done');
+    s.icon.textContent = '✓';
+    doneCount++;
+    fill.style.width = `${Math.min(100, Math.round((doneCount / GENERATION_STEPS.length) * 100))}%`;
+  }
 
+  function markError(key, msg) {
+    const s = stepEls[key]; if (!s) return;
+    s.row.classList.remove('active');
+    s.row.classList.add('error');
+    s.icon.textContent = '✗';
+    if (msg) s.lbl.textContent = msg;
+  }
+
+  let activeKey = null;
+
+  try {
     const response = await fetch('/api/products', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        name:        formData.name,
+        price:       formData.price,
+        ageRange:    formData.ageRange,
+        season:      formData.season,
+        colours:     formData.colours,
+        description: formData.description,
+        imageUrls:   formData.imageUrls || '',
+      }),
     });
 
-    const reader = response.body.getReader();
+    const reader  = response.body.getReader();
     const decoder = new TextDecoder();
-    let buffer = '';
+    let buffer    = '';
+    let lastEvent = '';
 
     while (true) {
       const { done, value } = await reader.read();
@@ -278,76 +448,92 @@ async function startProductGeneration(formData) {
 
       buffer += decoder.decode(value, { stream: true });
       const lines = buffer.split('\n');
-      buffer = lines.pop();
+      buffer = lines.pop(); // keep incomplete line
 
       for (const line of lines) {
-        if (line.startsWith('event: progress')) continue;
-        if (line.startsWith('event: done')) continue;
-        if (line.startsWith('event: error')) continue;
-        if (!line.startsWith('data: ')) continue;
+        const trimmed = line.trim();
+        if (trimmed.startsWith('event:')) {
+          lastEvent = trimmed.slice(6).trim();
+          continue;
+        }
+        if (!trimmed.startsWith('data:')) continue;
 
-        try {
-          const payload = JSON.parse(line.slice(6));
+        let payload;
+        try { payload = JSON.parse(trimmed.slice(5).trim()); } catch { continue; }
 
-          if (payload.step) {
-            const activeStep = steps.find(s => s.key === payload.step);
-            if (activeStep) {
-              markStep(payload.step, false, false);
-              // If message indicates completion, mark done on next progress
+        if (lastEvent === 'progress' && payload.step) {
+          // Mark previous active step as done when a new step arrives
+          if (activeKey && activeKey !== payload.step) {
+            markDone(activeKey);
+          }
+          activate(payload.step);
+          activeKey = payload.step;
+        }
+
+        if (lastEvent === 'done') {
+          // Mark remaining active/undone as done
+          if (activeKey) markDone(activeKey);
+          GENERATION_STEPS.forEach(s => markDone(s.key));
+          fill.style.width = '100%';
+
+          setTimeout(async () => {
+            overlay.classList.remove('active');
+            await loadProducts();
+            if (payload.slug) {
+              setTimeout(() => openContentSheet(payload.slug), 350);
             }
-          }
+          }, 900);
+          return;
+        }
 
-          // Detect completion of a step by seeing the next one start
-          if (payload.substep) {
-            const prev = steps.find(s => s.label.toLowerCase().includes(payload.substep.split(' ')[0].toLowerCase()));
-            if (prev) markStep(prev.key, true);
-          }
-        } catch {}
+        if (lastEvent === 'error') {
+          if (activeKey) markError(activeKey, payload.message || 'Error');
+          nameEl.textContent = 'Generation failed';
+          setTimeout(() => overlay.classList.remove('active'), 3000);
+          return;
+        }
       }
     }
 
-    // Parse final event
-    const finalLines = buffer.split('\n');
-    let finalData = null;
-    for (const line of finalLines) {
-      if (line.startsWith('data: ')) {
-        try { finalData = JSON.parse(line.slice(6)); } catch {}
-      }
-    }
-
-    // Mark all remaining as done
-    steps.forEach(s => markStep(s.key, true));
-    bar.style.width = '100%';
-
+    // Stream ended without done event — mark all done
+    GENERATION_STEPS.forEach(s => markDone(s.key));
+    fill.style.width = '100%';
     setTimeout(async () => {
-      progressModal.classList.remove('open');
+      overlay.classList.remove('active');
       await loadProducts();
-
-      if (finalData?.slug) {
-        setTimeout(() => openProductModal(finalData.slug), 300);
-      }
-    }, 800);
+    }, 900);
 
   } catch (err) {
-    title.textContent = 'Generation failed';
-    const errEl = el('div', 'progress-step error');
-    errEl.appendChild(el('div', 'step-icon', '✗'));
-    errEl.appendChild(el('span', '', err.message));
-    stepsEl.appendChild(errEl);
+    nameEl.textContent = 'Generation failed';
+    if (activeKey) markError(activeKey, err.message);
+    else {
+      const errRow = mk('div', 'progress-step error');
+      errRow.appendChild(mk('div', 'step-icon', '✗'));
+      errRow.appendChild(mk('span', '', err.message));
+      list.appendChild(errRow);
+    }
+    setTimeout(() => overlay.classList.remove('active'), 4000);
   }
 }
 
 // ─────────────────────────────────────────────────────────────
-// PRODUCT DETAIL MODAL
+// CONTENT SHEET (product detail)
 // ─────────────────────────────────────────────────────────────
 
-async function openProductModal(slug) {
-  const modal = $('#productModal');
-  modal.classList.add('open');
+async function openContentSheet(slug) {
+  state.currentSlug = slug;
+  state.currentProduct = null;
+  state.currentContentPack = null;
+  state.currentPlatform = 'instagram';
 
-  $('#productModalTitle').textContent = 'Loading...';
-  $('#productImages').innerHTML = '';
-  $('#tabContent').innerHTML = '<p style="padding:20px;color:var(--muted)">Loading content...</p>';
+  // Reset UI
+  $('#contentProductName').textContent = 'Loading…';
+  $('#contentProductSubtitle').textContent = '';
+  $('#contentImages').innerHTML = '';
+  $('#contentBody').innerHTML = '<div class="empty-state"><p>Loading content…</p></div>';
+  $$('.platform-pill', $('#platformRow')).forEach((p, i) => p.classList.toggle('active', i === 0));
+
+  openSheet('contentSheet');
 
   try {
     const [detailRes, packRes] = await Promise.all([
@@ -355,21 +541,27 @@ async function openProductModal(slug) {
       fetch(`/api/products/${slug}/content-pack`),
     ]);
 
+    if (!detailRes.ok) throw new Error('Product not found');
     const detail = await detailRes.json();
     const pack   = packRes.ok ? await packRes.json() : null;
 
-    state.currentSlug = slug;
-    state.currentProduct = detail;
+    state.currentProduct    = detail;
     state.currentContentPack = pack;
 
-    const p = detail.product;
-    $('#productModalTitle').textContent = p.name;
-    $('#productModalSubtitle').textContent = `Ages ${p.ageRange} · R${p.price} · ${p.season} · ${(Array.isArray(p.colours) ? p.colours : [p.colours]).join(', ')}`;
+    const p = detail.product || {};
+    $('#contentProductName').textContent = p.name || slug;
+    const colours = Array.isArray(p.colours) ? p.colours.join(', ') : (p.colours || '');
+    $('#contentProductSubtitle').textContent = [
+      p.ageRange ? `Ages ${p.ageRange}` : '',
+      p.price    ? `R${p.price}`        : '',
+      p.season   || '',
+      colours    || '',
+    ].filter(Boolean).join(' · ');
 
     // Images
-    const imgStrip = $('#productImages');
+    const imgStrip = $('#contentImages');
     imgStrip.innerHTML = '';
-    if (detail.images && detail.images.length > 0) {
+    if (detail.images && detail.images.length) {
       detail.images.forEach(src => {
         const img = new Image();
         img.src = src;
@@ -377,371 +569,575 @@ async function openProductModal(slug) {
         imgStrip.appendChild(img);
       });
     } else {
-      imgStrip.appendChild(el('div', 'product-images-empty', 'No images — add image URLs when processing this product.'));
+      imgStrip.appendChild(mk('div', 'content-images-empty', 'No product images'));
     }
 
-    // Render active tab
-    renderActiveTab(detail, pack);
+    renderPlatformContent('instagram');
 
   } catch (err) {
-    $('#tabContent').innerHTML = `<p style="color:var(--error);padding:20px">Failed to load: ${err.message}</p>`;
+    $('#contentBody').innerHTML = `<div class="empty-state"><p style="color:var(--error)">Failed to load: ${escHtml(err.message)}</p></div>`;
   }
 }
 
-$('#closeProductModal').addEventListener('click', () => {
-  $('#productModal').classList.remove('open');
-  state.currentSlug = null;
+$('#contentSheetClose').addEventListener('click', () => closeSheet('contentSheet'));
+
+// Delete product
+$('#contentDeleteBtn').addEventListener('click', async () => {
+  const slug = state.currentSlug;
+  if (!slug) return;
+  if (!confirm('Delete this product and all its content? This cannot be undone.')) return;
+
+  const r = await fetch(`/api/products/${slug}`, { method: 'DELETE' });
+  if (r.ok) {
+    closeSheet('contentSheet');
+    showToast('Product deleted');
+    await loadProducts();
+  } else {
+    showToast('Delete failed');
+  }
 });
 
-// Tab switching
-$('#contentTabs').addEventListener('click', e => {
-  const tab = e.target.closest('.tab');
-  if (!tab) return;
-  $$('.tab', $('#contentTabs')).forEach(t => t.classList.remove('active'));
-  tab.classList.add('active');
-  renderActiveTab(state.currentProduct, state.currentContentPack);
+// Platform switcher
+$('#platformRow').addEventListener('click', e => {
+  const btn = e.target.closest('.platform-pill');
+  if (!btn) return;
+  $$('.platform-pill', $('#platformRow')).forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  state.currentPlatform = btn.dataset.platform;
+  renderPlatformContent(state.currentPlatform);
 });
 
-function renderActiveTab(detail, pack) {
-  const activeTab = $('.tab.active', $('#contentTabs'))?.dataset?.tab || 'shopify';
-  const content = $('#tabContent');
-  content.innerHTML = '';
+function renderPlatformContent(platform) {
+  const body = $('#contentBody');
+  const detail = state.currentProduct;
+  const pack   = state.currentContentPack;
 
-  switch (activeTab) {
-    case 'shopify':    renderShopifyTab(content, pack?.shopify, detail); break;
-    case 'instagram':  renderInstagramTab(content, pack?.instagram); break;
-    case 'tiktok':     renderTikTokTab(content, pack?.tiktok, detail); break;
-    case 'pinterest':  renderPinterestTab(content, pack?.pinterest); break;
-    case 'facebook':   renderFacebookTab(content, pack?.facebook); break;
-    case 'email':      renderEmailTab(content, pack?.email); break;
-    case 'video':      renderMarkdownTab(content, detail?.content?.videoPrompts, 'Video Prompts'); break;
-    case 'capcut':     renderMarkdownTab(content, detail?.content?.capcutBrief, 'CapCut Brief'); break;
+  if (!detail && !pack) {
+    body.innerHTML = '<div class="empty-state"><p>No content available</p></div>';
+    return;
+  }
+
+  body.innerHTML = '';
+
+  switch (platform) {
+    case 'instagram':  renderInstagram(body, pack?.instagram); break;
+    case 'tiktok':     renderTikTok(body, pack?.tiktok, detail); break;
+    case 'pinterest':  renderPinterest(body, pack?.pinterest); break;
+    case 'shopify':    renderShopify(body, pack?.shopify, detail); break;
+    case 'facebook':   renderFacebook(body, pack?.facebook); break;
+    case 'email':      renderEmail(body, pack?.email); break;
+    case 'video':      renderMarkdown(body, detail?.content?.videoPrompts, 'Video Prompts'); break;
+    case 'capcut':     renderMarkdown(body, detail?.content?.capcutBrief, 'CapCut Brief'); break;
+    default:           body.innerHTML = '<div class="empty-state"><p>Select a platform above</p></div>';
   }
 }
 
-// ── TAB RENDERERS ─────────────────────────────────────────────
+// ── PLATFORM RENDERERS ───────────────────────────────────────
 
-function renderShopifyTab(el, shopify, detail) {
-  if (!shopify) { el.innerHTML = '<p class="form-hint" style="padding:20px">Content not found. Re-generate the product.</p>'; return; }
-
-  el.appendChild(section('Product Title', copyBlock(shopify.title || '')));
-  el.appendChild(section('Product Description', copyBlock(shopify.description || '')));
-
-  if (shopify.bullets?.length) {
-    const s = section('Bullet Points');
-    const list = document.createElement('ul');
-    list.className = 'bullet-list';
-    shopify.bullets.forEach(b => {
-      const li = document.createElement('li');
-      li.className = 'bullet-item';
-      li.textContent = b;
-      list.appendChild(li);
-    });
-    const copyAllBtn = el2('button', 'btn btn-ghost', 'Copy All Bullets');
-    copyAllBtn.style.marginTop = '8px';
-    copyAllBtn.onclick = () => copyToClipboard(shopify.bullets.join('\n'), copyAllBtn);
-    s.appendChild(list);
-    s.appendChild(copyAllBtn);
-    el.appendChild(s);
-  }
-
-  el.appendChild(section('SEO Meta Title', copyBlock(shopify.metaTitle || '')));
-  el.appendChild(section('SEO Meta Description', copyBlock(shopify.metaDescription || '')));
-
-  if (shopify.tags?.length) {
-    const s = section('Shopify Tags');
-    const tags = el2('div', 'tag-list');
-    shopify.tags.forEach(t => tags.appendChild(el2('span', 'tag', t)));
-    s.appendChild(tags);
-    el.appendChild(s);
-  }
-
-  if (shopify.altTexts?.length) {
-    const s = section('Image Alt Texts');
-    shopify.altTexts.forEach((alt, i) => {
-      const row = el2('div', '', `<strong style="font-size:.75rem;color:var(--muted)">Image ${i+1}</strong>`);
-      row.style.marginBottom = '8px';
-      row.appendChild(copyBlock(alt));
-      s.appendChild(row);
-    });
-    el.appendChild(s);
-  }
+function noContent(el, msg) {
+  el.innerHTML = `<div class="empty-state" style="padding:40px 20px"><div class="empty-icon">🤷</div><p>${msg}</p></div>`;
 }
 
-function renderInstagramTab(container, instagram) {
-  if (!instagram) { container.innerHTML = '<p class="form-hint" style="padding:20px">No Instagram content found.</p>'; return; }
+function renderInstagram(container, ig) {
+  if (!ig) { noContent(container, 'No Instagram content. Re-generate the product.'); return; }
 
-  const cards = el2('div', 'caption-cards');
+  // Caption variant cards
+  const sec = section('Captions — pick one');
+  const cards = mk('div', 'caption-cards');
+
   const variants = [
-    { label: 'Story — emotional, moment-based', text: instagram.captionStory },
-    { label: 'Feature — product-led, direct',  text: instagram.captionFeature },
-    { label: 'UGC — real mum voice',           text: instagram.captionUGC },
+    { label: 'Story — emotional, moment-based', text: ig.captionStory },
+    { label: 'Feature — product-led, direct',   text: ig.captionFeature },
+    { label: 'UGC — real mum voice',            text: ig.captionUGC },
   ];
+
   variants.forEach(v => {
-    const card = el2('div', 'caption-card');
-    card.appendChild(el2('div', 'caption-card-label', v.label));
-    const block = copyBlock(v.text || '');
-    card.appendChild(block);
+    if (!v.text) return;
+    const card = mk('div', 'caption-card');
+    card.appendChild(mk('div', 'caption-card-label', v.label));
+    const textEl = mk('div', 'caption-card-text');
+    textEl.textContent = v.text;
+    const btn = mk('button', 'copy-btn', 'Copy');
+    btn.onclick = () => copyText(v.text, btn);
+    card.appendChild(textEl);
+    card.appendChild(btn);
     cards.appendChild(card);
   });
-  container.appendChild(section('Captions (choose one per post)', cards));
 
-  const hashSection = section('Hashtags (copy entire block)');
-  const hashBlock = el2('div', 'hashtag-block');
-  hashBlock.appendChild(document.createTextNode(instagram.hashtags || ''));
-  const copyBtn = el2('button', 'copy-btn', 'Copy');
-  copyBtn.style.cssText = 'position:static;margin-top:8px;display:block;opacity:1;';
-  copyBtn.onclick = () => copyToClipboard(instagram.hashtags || '', copyBtn);
-  hashBlock.appendChild(copyBtn);
-  hashSection.appendChild(hashBlock);
-  container.appendChild(hashSection);
+  sec.appendChild(cards);
+  container.appendChild(sec);
+
+  // Hashtags
+  if (ig.hashtags) {
+    const hSec = section('Hashtags');
+    const hBlock = mk('div', 'hashtag-block');
+    hBlock.textContent = ig.hashtags;
+    const btn = mk('button', 'copy-btn', 'Copy Hashtags');
+    btn.style.marginTop = '8px';
+    btn.onclick = () => copyText(ig.hashtags, btn);
+    hSec.appendChild(hBlock);
+    hSec.appendChild(btn);
+    container.appendChild(hSec);
+  }
 }
 
-function renderTikTokTab(container, tiktok, detail) {
-  if (!tiktok) { container.innerHTML = '<p class="form-hint" style="padding:20px">No TikTok content found.</p>'; return; }
+function renderTikTok(container, tk, detail) {
+  if (!tk) { noContent(container, 'No TikTok content. Re-generate the product.'); return; }
 
-  container.appendChild(section('Hook (First 3 Seconds)', copyBlock(tiktok.hook || '')));
-  container.appendChild(section('Full Script (Voiceover)', copyBlock(tiktok.script || '')));
+  if (tk.hook) {
+    const s = section('Hook (First 3 Seconds)');
+    s.appendChild(copyBlock(tk.hook));
+    container.appendChild(s);
+  }
 
-  if (tiktok.onScreenText?.length) {
-    const s = section('On-Screen Text Cues');
-    const timeline = el2('div', 'on-screen-timeline');
-    tiktok.onScreenText.forEach(item => {
-      const row = el2('div', 'timeline-item');
-      row.appendChild(el2('div', 'timeline-time', item.timestamp || '?'));
-      row.appendChild(el2('div', 'timeline-text', `"${item.text}" — ${item.style || ''}`));
+  if (tk.script) {
+    const s = section('Full Script (Voiceover)');
+    s.appendChild(copyBlock(tk.script));
+    container.appendChild(s);
+  }
+
+  if (tk.onScreenText && tk.onScreenText.length) {
+    const s = section('On-Screen Text Timeline');
+    const timeline = mk('div', 'on-screen-timeline');
+    tk.onScreenText.forEach(item => {
+      const row = mk('div', 'timeline-item');
+      row.appendChild(mk('div', 'timeline-time', item.timestamp || '?'));
+      const txt = mk('div', 'timeline-text');
+      txt.textContent = `"${item.text}"${item.style ? ` — ${item.style}` : ''}`;
+      row.appendChild(txt);
       timeline.appendChild(row);
     });
     s.appendChild(timeline);
     container.appendChild(s);
   }
 
-  if (tiktok.soundMood) {
-    container.appendChild(section('Music Mood (for CapCut search)', copyBlock(tiktok.soundMood)));
+  if (tk.soundMood) {
+    const s = section('Music Mood (for CapCut search)');
+    s.appendChild(copyBlock(tk.soundMood));
+    container.appendChild(s);
   }
 
-  const hashSection = section('TikTok Hashtags');
-  const hashBlock = el2('div', 'hashtag-block');
-  hashBlock.appendChild(document.createTextNode(tiktok.hashtags || ''));
-  const copyBtn = el2('button', 'copy-btn', 'Copy');
-  copyBtn.style.cssText = 'position:static;margin-top:8px;display:block;opacity:1;';
-  copyBtn.onclick = () => copyToClipboard(tiktok.hashtags || '', copyBtn);
-  hashBlock.appendChild(copyBtn);
-  hashSection.appendChild(hashBlock);
-  container.appendChild(hashSection);
+  if (tk.hashtags) {
+    const s = section('TikTok Hashtags');
+    const hBlock = mk('div', 'hashtag-block');
+    hBlock.textContent = tk.hashtags;
+    const btn = mk('button', 'copy-btn', 'Copy Hashtags');
+    btn.style.marginTop = '8px';
+    btn.onclick = () => copyText(tk.hashtags, btn);
+    s.appendChild(hBlock);
+    s.appendChild(btn);
+    container.appendChild(s);
+  }
 
-  // TikTok draft caption
   if (detail?.content?.tiktokCaption) {
-    const draftSection = section('Complete TikTok Caption (caption.txt)');
-    draftSection.appendChild(copyBlock(detail.content.tiktokCaption));
-    container.appendChild(draftSection);
+    const s = section('Complete TikTok Caption (caption.txt)');
+    s.appendChild(copyBlock(detail.content.tiktokCaption));
+    container.appendChild(s);
   }
 }
 
-function renderPinterestTab(container, pinterest) {
-  if (!pinterest) { container.innerHTML = '<p class="form-hint" style="padding:20px">No Pinterest content found.</p>'; return; }
-  container.appendChild(section('Pin Title (max 100 chars)', copyBlock(pinterest.pinTitle || '')));
-  container.appendChild(section('Pin Description (SEO)', copyBlock(pinterest.pinDescription || '')));
-  if (pinterest.boardSuggestion) {
-    container.appendChild(section('Board Recommendation', el2('p', '', pinterest.boardSuggestion)));
+function renderPinterest(container, pin) {
+  if (!pin) { noContent(container, 'No Pinterest content. Re-generate the product.'); return; }
+
+  if (pin.pinTitle) {
+    const s = section('Pin Title (max 100 chars)');
+    s.appendChild(copyBlock(pin.pinTitle));
+    container.appendChild(s);
+  }
+
+  if (pin.pinDescription) {
+    const s = section('Pin Description (SEO-optimised)');
+    s.appendChild(copyBlock(pin.pinDescription));
+    container.appendChild(s);
+  }
+
+  if (pin.boardSuggestion) {
+    const s = section('Board Recommendation');
+    const p = mk('p', '', '');
+    p.textContent = pin.boardSuggestion;
+    p.style.cssText = 'font-size:.86rem;color:var(--charcoal2);line-height:1.5;';
+    s.appendChild(p);
+    container.appendChild(s);
   }
 }
 
-function renderFacebookTab(container, facebook) {
-  if (!facebook) { container.innerHTML = '<p class="form-hint" style="padding:20px">No Facebook content found.</p>'; return; }
-  container.appendChild(section('Caption', copyBlock(facebook.caption || '')));
-  if (facebook.hashtags) {
-    const h = section('Hashtags');
-    h.appendChild(copyBlock(facebook.hashtags));
-    container.appendChild(h);
+function renderShopify(container, sh, detail) {
+  if (!sh) { noContent(container, 'No Shopify content. Re-generate the product.'); return; }
+
+  if (sh.title) {
+    const s = section('Product Title');
+    s.appendChild(copyBlock(sh.title));
+    container.appendChild(s);
+  }
+
+  if (sh.description) {
+    const s = section('Product Description');
+    s.appendChild(copyBlock(sh.description));
+    container.appendChild(s);
+  }
+
+  if (sh.bullets && sh.bullets.length) {
+    const s = section('Bullet Points');
+    const list = mk('ul', 'bullet-list');
+    sh.bullets.forEach(b => {
+      const li = mk('li', 'bullet-item');
+      li.textContent = b;
+      list.appendChild(li);
+    });
+    const copyBtn = mk('button', 'copy-btn', 'Copy All Bullets');
+    copyBtn.style.marginTop = '10px';
+    copyBtn.onclick = () => copyText(sh.bullets.join('\n'), copyBtn);
+    s.appendChild(list);
+    s.appendChild(copyBtn);
+    container.appendChild(s);
+  }
+
+  if (sh.metaTitle) {
+    const s = section('SEO Meta Title');
+    s.appendChild(copyBlock(sh.metaTitle));
+    container.appendChild(s);
+  }
+
+  if (sh.metaDescription) {
+    const s = section('SEO Meta Description');
+    s.appendChild(copyBlock(sh.metaDescription));
+    container.appendChild(s);
+  }
+
+  if (sh.tags && sh.tags.length) {
+    const s = section('Shopify Tags');
+    const tagList = mk('div', 'tag-list');
+    sh.tags.forEach(t => tagList.appendChild(mk('span', 'tag', escHtml(t))));
+    const copyBtn = mk('button', 'copy-btn', 'Copy Tags');
+    copyBtn.style.marginTop = '8px';
+    copyBtn.onclick = () => copyText(sh.tags.join(', '), copyBtn);
+    s.appendChild(tagList);
+    s.appendChild(copyBtn);
+    container.appendChild(s);
+  }
+
+  if (sh.altTexts && sh.altTexts.length) {
+    const s = section('Image Alt Texts');
+    sh.altTexts.forEach((alt, i) => {
+      const lbl = mk('div', '');
+      lbl.style.cssText = 'font-size:.72rem;color:var(--muted);font-weight:500;margin-bottom:4px;margin-top:8px;';
+      lbl.textContent = `Image ${i + 1}`;
+      s.appendChild(lbl);
+      s.appendChild(copyBlock(alt));
+    });
+    container.appendChild(s);
   }
 }
 
-function renderEmailTab(container, email) {
-  if (!email) { container.innerHTML = '<p class="form-hint" style="padding:20px">No email content found.</p>'; return; }
-  container.appendChild(section('Subject A — Curiosity (recommended to test first)', copyBlock(email.subjectA || '')));
-  container.appendChild(section('Subject B — Direct product announcement', copyBlock(email.subjectB || '')));
-  container.appendChild(section('Subject C — Urgency / social proof', copyBlock(email.subjectC || '')));
-  container.appendChild(section('Email Preview Text', copyBlock(email.previewText || '')));
+function renderFacebook(container, fb) {
+  if (!fb) { noContent(container, 'No Facebook content. Re-generate the product.'); return; }
+
+  if (fb.caption) {
+    const s = section('Caption');
+    s.appendChild(copyBlock(fb.caption));
+    container.appendChild(s);
+  }
+
+  if (fb.hashtags) {
+    const s = section('Hashtags');
+    const hBlock = mk('div', 'hashtag-block');
+    hBlock.textContent = fb.hashtags;
+    const btn = mk('button', 'copy-btn', 'Copy Hashtags');
+    btn.style.marginTop = '8px';
+    btn.onclick = () => copyText(fb.hashtags, btn);
+    s.appendChild(hBlock);
+    s.appendChild(btn);
+    container.appendChild(s);
+  }
 }
 
-function renderMarkdownTab(container, markdown, title) {
-  if (!markdown) { container.innerHTML = `<p class="form-hint" style="padding:20px">No ${title} found.</p>`; return; }
-  const prose = el2('div', 'markdown-prose');
-  prose.innerHTML = markdownToHtml(markdown);
-  container.appendChild(prose);
+function renderEmail(container, email) {
+  if (!email) { noContent(container, 'No email content. Re-generate the product.'); return; }
+
+  const variants = [
+    { label: 'Subject A — Curiosity (recommended)', text: email.subjectA },
+    { label: 'Subject B — Direct announcement',     text: email.subjectB },
+    { label: 'Subject C — Urgency / social proof',  text: email.subjectC },
+  ];
+
+  const s = section('Subject Lines (A/B/C test)');
+  const cards = mk('div', 'caption-cards');
+
+  variants.forEach(v => {
+    if (!v.text) return;
+    const card = mk('div', 'caption-card');
+    card.appendChild(mk('div', 'caption-card-label', v.label));
+    const textEl = mk('div', 'caption-card-text');
+    textEl.textContent = v.text;
+    const btn = mk('button', 'copy-btn', 'Copy');
+    btn.onclick = () => copyText(v.text, btn);
+    card.appendChild(textEl);
+    card.appendChild(btn);
+    cards.appendChild(card);
+  });
+
+  s.appendChild(cards);
+  container.appendChild(s);
+
+  if (email.previewText) {
+    const ps = section('Email Preview Text');
+    ps.appendChild(copyBlock(email.previewText));
+    container.appendChild(ps);
+  }
 }
 
-// ── MARKDOWN RENDERER (basic) ─────────────────────────────────
+function renderMarkdown(container, md, title) {
+  if (!md) { noContent(container, `No ${title} found. Re-generate the product.`); return; }
+
+  const s = section(title);
+  const wrap = mk('div', 'markdown-block');
+  const prose = mk('div', 'markdown-prose');
+  prose.innerHTML = markdownToHtml(md);
+  wrap.appendChild(prose);
+  const copyBtn = mk('button', 'copy-btn', 'Copy Raw Text');
+  copyBtn.style.marginTop = '10px';
+  copyBtn.onclick = () => copyText(md, copyBtn);
+  s.appendChild(wrap);
+  s.appendChild(copyBtn);
+  container.appendChild(s);
+}
+
+// ── BASIC MARKDOWN → HTML ─────────────────────────────────────
 
 function markdownToHtml(md) {
-  return md
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  let html = String(md)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  // Code blocks first (protect from further processing)
+  const codeBlocks = [];
+  html = html.replace(/```[\w]*\n?([\s\S]*?)```/gm, (_, code) => {
+    codeBlocks.push(code);
+    return `%%CODE${codeBlocks.length - 1}%%`;
+  });
+
+  html = html
     // Headings
-    .replace(/^#{3} (.+)$/gm, '<h3>$1</h3>')
-    .replace(/^#{2} (.+)$/gm, '<h2>$1</h2>')
-    .replace(/^#{1} (.+)$/gm, '<h1>$1</h1>')
-    // Code blocks
-    .replace(/```[\w]*\n([\s\S]*?)```/gm, '<pre><code>$1</code></pre>')
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^## (.+)$/gm,  '<h2>$1</h2>')
+    .replace(/^# (.+)$/gm,   '<h1>$1</h1>')
     // Inline code
     .replace(/`([^`]+)`/g, '<code>$1</code>')
-    // Bold/italic
+    // Bold & italic
+    .replace(/\*\*\*([^*]+)\*\*\*/g, '<strong><em>$1</em></strong>')
     .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*([^*]+)\*/g, '<em>$1</em>')
-    // Tables
-    .replace(/\|(.+)\|\n\|[-| ]+\|\n((?:\|.+\|\n?)*)/gm, (m, header, rows) => {
-      const ths = header.split('|').filter(c => c.trim()).map(c => `<th>${c.trim()}</th>`).join('');
-      const trs = rows.trim().split('\n').map(row => {
-        const tds = row.split('|').filter(c => c.trim()).map(c => `<td>${c.trim()}</td>`).join('');
-        return `<tr>${tds}</tr>`;
-      }).join('');
-      return `<table><thead><tr>${ths}</tr></thead><tbody>${trs}</tbody></table>`;
-    })
+    .replace(/\*([^*\n]+)\*/g, '<em>$1</em>')
     // Blockquotes
     .replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>')
-    // Horizontal rules
+    // HR
     .replace(/^---+$/gm, '<hr>')
-    // Checkboxes
-    .replace(/^- \[ \] (.+)$/gm, '<div style="display:flex;gap:8px;margin-bottom:6px"><input type="checkbox" disabled> <span>$1</span></div>')
-    .replace(/^- \[x\] (.+)$/gim, '<div style="display:flex;gap:8px;margin-bottom:6px"><input type="checkbox" checked disabled> <span>$1</span></div>')
-    // Lists
-    .replace(/^- (.+)$/gm, '<li>$1</li>')
-    .replace(/(<li>.*<\/li>\n?)+/g, m => `<ul>${m}</ul>`)
-    // Paragraphs
-    .replace(/\n\n([^<\n])/g, '\n\n<p>$1')
-    .replace(/([^>])\n\n/g, '$1</p>\n\n');
+    // Unordered lists
+    .replace(/^[-*] (.+)$/gm, '<li>$1</li>')
+    // Ordered lists
+    .replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
+    // Wrap consecutive <li> in <ul>
+    .replace(/(<li>[\s\S]*?<\/li>\n?)+/g, m => `<ul>${m}</ul>`)
+    // Paragraphs (double newline → p)
+    .replace(/\n\n([^<])/g, '\n\n<p>$1')
+    .replace(/([^>])\n\n/g, '$1</p>\n\n')
+    // Single newlines → <br> inside paragraphs (simple approach)
+    .replace(/([^\n>])\n([^\n<])/g, '$1<br>$2');
+
+  // Restore code blocks
+  codeBlocks.forEach((code, i) => {
+    html = html.replace(`%%CODE${i}%%`, `<pre><code>${code}</code></pre>`);
+  });
+
+  return html;
 }
 
+// ── SCHEDULE POST BUTTON ──────────────────────────────────────
+
+$('#contentScheduleBtn').addEventListener('click', () => {
+  openScheduleSheet();
+});
+
 // ─────────────────────────────────────────────────────────────
-// SCHEDULE MODAL
+// SCHEDULE SHEET
 // ─────────────────────────────────────────────────────────────
 
 const BEST_TIMES = {
-  instagram:         ['07:00', '12:30', '19:00'],
-  instagram_reels:   ['08:00', '17:00', '20:00'],
-  instagram_stories: ['09:00', '14:00', '21:00'],
-  facebook:          ['08:00', '13:00', '16:00'],
-  tiktok:            ['07:00', '12:00', '19:00', '21:00'],
-  pinterest:         ['20:00', '21:00', '22:00'],
+  instagram:  ['07:00', '12:30', '19:00'],
+  tiktok:     ['07:00', '12:00', '19:00', '21:00'],
+  pinterest:  ['20:00', '21:00', '22:00'],
+  facebook:   ['08:00', '13:00', '16:00'],
 };
 
-$('#scheduleFromModal').addEventListener('click', () => {
-  if (!state.currentSlug) return;
-  openScheduleModal(state.currentSlug);
-});
-
-$('#closeScheduleModal').addEventListener('click', () => $('#scheduleModal').classList.remove('open'));
-$('#cancelScheduleModal').addEventListener('click', () => $('#scheduleModal').classList.remove('open'));
-
-$('#schedulePlatform').addEventListener('change', updateTimeSuggestions);
-
-function openScheduleModal(slug) {
-  state.currentSlug = slug;
-  // Default to tomorrow 07:00
+function openScheduleSheet() {
+  // Defaults
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
-  tomorrow.setHours(7, 0, 0, 0);
-  $('#scheduleDateTime').value = tomorrow.toISOString().slice(0, 16);
-  updateTimeSuggestions();
-  $('#scheduleModal').classList.add('open');
+  $('#schedDate').value = tomorrow.toISOString().slice(0, 10);
+  $('#schedTime').value = '07:00';
+  $('#schedPlatform').value = 'instagram';
+
+  // Reset platform icons
+  $$('.platform-icon-btn', $('#schedPlatformRow')).forEach((btn, i) => btn.classList.toggle('active', i === 0));
+
+  // Reset variant pills
+  $$('#schedVariantPills .pill').forEach((p, i) => p.classList.toggle('active', i === 0));
+  $('#schedCaptionVariant').value = 'feature';
+
+  updateTimeChips('instagram');
+  openSheet('scheduleSheet');
 }
 
-function updateTimeSuggestions() {
-  const platform = $('#schedulePlatform').value;
-  const times = BEST_TIMES[platform] || ['07:00', '12:00', '19:00'];
-  const chips = $('#timeChips');
-  chips.innerHTML = '';
+// Platform icon buttons in schedule sheet
+$('#schedPlatformRow').addEventListener('click', e => {
+  const btn = e.target.closest('.platform-icon-btn');
+  if (!btn) return;
+  $$('.platform-icon-btn', $('#schedPlatformRow')).forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  $('#schedPlatform').value = btn.dataset.platform;
+  updateTimeChips(btn.dataset.platform);
+});
 
+// Caption variant pills in schedule sheet
+initPillGroupDirect('#schedVariantPills', '#schedCaptionVariant');
+
+function initPillGroupDirect(groupSel, hiddenSel) {
+  const container = $(groupSel);
+  if (!container) return;
+  container.addEventListener('click', e => {
+    const btn = e.target.closest('.pill');
+    if (!btn) return;
+    $$('.pill', container).forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    $(hiddenSel).value = btn.dataset.value;
+  });
+}
+
+function updateTimeChips(platform) {
+  const chips = $('#schedTimeChips');
+  chips.innerHTML = '';
+  const times = BEST_TIMES[platform] || ['07:00', '12:00', '19:00'];
   times.forEach(t => {
-    const chip = el2('button', 'time-chip', t + ' SAST');
-    chip.onclick = () => {
-      const current = new Date($('#scheduleDateTime').value);
-      const [h, m] = t.split(':');
-      current.setHours(Number(h), Number(m));
-      $('#scheduleDateTime').value = current.toISOString().slice(0, 16);
-    };
+    const chip = mk('button', 'time-chip', `${t} SAST`);
+    chip.addEventListener('click', () => {
+      $$('.time-chip', chips).forEach(c => c.classList.remove('selected'));
+      chip.classList.add('selected');
+      $('#schedTime').value = t;
+    });
     chips.appendChild(chip);
   });
 }
 
-$('#confirmSchedule').addEventListener('click', async () => {
-  const slug = state.currentSlug;
-  const platform = $('#schedulePlatform').value;
-  const captionVariant = $('#scheduleCaptionVariant').value;
-  const dateTime = $('#scheduleDateTime').value;
+$('#scheduleSheetClose').addEventListener('click', () => closeSheet('scheduleSheet'));
+$('#schedSheetCancel').addEventListener('click', () => closeSheet('scheduleSheet'));
 
-  if (!slug || !dateTime) return;
+$('#schedConfirm').addEventListener('click', async () => {
+  const slug     = state.currentSlug;
+  const platform = $('#schedPlatform').value;
+  const variant  = $('#schedCaptionVariant').value;
+  const date     = $('#schedDate').value;
+  const time     = $('#schedTime').value;
+
+  if (!slug) { showToast('No product selected'); return; }
+  if (!date || !time) { showToast('Please pick a date and time'); return; }
+
+  const scheduledTime = new Date(`${date}T${time}:00`).toISOString();
 
   const r = await fetch('/api/queue/schedule', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ slug, platform, captionVariant, scheduledTime: new Date(dateTime).toISOString() }),
+    body: JSON.stringify({ slug, platform, captionVariant: variant, scheduledTime }),
   });
 
   if (r.ok) {
-    $('#scheduleModal').classList.remove('open');
-    showToast('Post added to schedule ✓');
+    closeSheet('scheduleSheet');
+    showToast('Post added to queue ✓');
+    if ($('#view-queue').classList.contains('active')) loadQueue();
+    if ($('#view-schedule').classList.contains('active')) renderScheduleView();
+  } else {
+    showToast('Failed to schedule post');
   }
 });
 
 // ─────────────────────────────────────────────────────────────
-// CALENDAR
+// SCHEDULE VIEW (day strip + posts)
 // ─────────────────────────────────────────────────────────────
 
-$('#prevWeek').addEventListener('click', () => { state.calendarOffset--; renderCalendar(); });
-$('#nextWeek').addEventListener('click', () => { state.calendarOffset++; renderCalendar(); });
-
-async function renderCalendar() {
-  const grid = $('#calendarGrid');
-  grid.innerHTML = '';
-
-  // Build week dates
+async function renderScheduleView() {
+  // Build 7-day strip centred on today
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const monday = new Date(today);
-  monday.setDate(today.getDate() - today.getDay() + 1 + state.calendarOffset * 7);
 
-  const days = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(monday);
-    d.setDate(monday.getDate() + i);
-    return d;
+  if (!state.selectedDay) state.selectedDay = new Date(today);
+
+  const days = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(today);
+    d.setDate(today.getDate() + i);
+    days.push(d);
+  }
+
+  const strip = $('#dayStrip');
+  strip.innerHTML = '';
+
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+  days.forEach(day => {
+    const isToday    = day.toDateString() === today.toDateString();
+    const isSelected = day.toDateString() === state.selectedDay.toDateString();
+
+    const pill = mk('div', `day-pill${isToday ? ' today' : ''}${isSelected ? ' selected' : ''}`);
+    pill.appendChild(mk('div', 'day-pill-name', dayNames[day.getDay()]));
+    pill.appendChild(mk('div', 'day-pill-date', day.getDate()));
+
+    pill.addEventListener('click', () => {
+      state.selectedDay = new Date(day);
+      renderScheduleView();
+    });
+
+    strip.appendChild(pill);
   });
 
-  // Update label
-  const fmt = d => d.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' });
-  $('#weekLabel').textContent = `${fmt(days[0])} – ${fmt(days[6])}`;
-
-  // Load queue for this period
+  // Load queue data
   let queue = { scheduled: [] };
   try {
     const r = await fetch('/api/queue');
     queue = await r.json();
-  } catch {}
+  } catch { /* offline */ }
 
-  const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  // Filter posts for selected day
+  const selDay = state.selectedDay;
+  const dayPosts = (queue.scheduled || []).filter(p => {
+    const pd = new Date(p.scheduledTime);
+    pd.setHours(0, 0, 0, 0);
+    return pd.toDateString() === selDay.toDateString();
+  }).sort((a, b) => new Date(a.scheduledTime) - new Date(b.scheduledTime));
 
-  days.forEach((day, i) => {
-    const dayEl = el2('div', `cal-day${day.toDateString() === today.toDateString() ? ' today' : ''}`);
-    dayEl.appendChild(el2('div', 'cal-day-header', dayNames[i]));
-    dayEl.appendChild(el2('div', 'cal-day-date', day.getDate()));
+  const postsEl = $('#schedulePosts');
+  postsEl.innerHTML = '';
 
-    // Filter posts for this day
-    const dayPosts = queue.scheduled.filter(p => {
-      const postDay = new Date(p.scheduledTime);
-      postDay.setHours(0, 0, 0, 0);
-      return postDay.toDateString() === day.toDateString();
-    });
+  if (dayPosts.length === 0) {
+    postsEl.innerHTML = `<div class="empty-state"><div class="empty-icon">📅</div><h3>No posts on this day</h3><p>Schedule content from a product to see it here.</p></div>`;
+    return;
+  }
 
-    dayPosts.forEach(post => {
-      const time = new Date(post.scheduledTime).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' });
-      const postEl = el2('div', `cal-post ${post.platform}${post.status === 'published' ? ' published' : ''}`,
-        `${time} ${post.product?.slice(0, 12) || post.slug}`
-      );
-      postEl.title = `${post.platform} · ${post.product} · ${time}`;
-      dayEl.appendChild(postEl);
-    });
+  dayPosts.forEach(post => {
+    const item = mk('div', 'schedule-post-item');
 
-    grid.appendChild(dayEl);
+    const plat = mk('div', `spost-platform ${post.platform}`, platformEmoji(post.platform));
+    item.appendChild(plat);
+
+    const info = mk('div', 'spost-info');
+    const pname = mk('div', 'spost-product');
+    pname.textContent = post.product || post.slug;
+    info.appendChild(pname);
+    const ptime = mk('div', 'spost-time');
+    ptime.textContent = `${post.platform} · ${fmtTime(post.scheduledTime)}`;
+    info.appendChild(ptime);
+    item.appendChild(info);
+
+    const status = mk('span', `spost-status ${post.status}`, post.status);
+    item.appendChild(status);
+
+    postsEl.appendChild(item);
   });
 }
 
@@ -755,121 +1151,216 @@ async function loadQueue() {
     state.queue = await r.json();
   } catch { return; }
 
-  // Scheduled posts
-  const list = $('#queueList');
-  list.innerHTML = '';
+  // Scheduled
+  const list  = $('#queueList');
   const count = $('#queueCount');
-  count.textContent = state.queue.scheduled.length;
+  list.innerHTML = '';
+  const scheduled = state.queue.scheduled || [];
+  count.textContent = scheduled.length;
 
-  if (state.queue.scheduled.length === 0) {
-    list.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><h3>No posts scheduled</h3><p>Open a product and click "Schedule Post".</p></div>';
+  if (scheduled.length === 0) {
+    list.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><h3>No posts scheduled</h3><p>Open a product and tap "Schedule Post".</p></div>';
   } else {
-    state.queue.scheduled.forEach(post => list.appendChild(buildQueueItem(post)));
+    scheduled.forEach(post => list.appendChild(buildQueueItem(post)));
   }
 
   // TikTok drafts
   const tlist = $('#tiktokList');
   tlist.innerHTML = '';
-  if (state.queue.tiktokDrafts.length === 0) {
+  const drafts = state.queue.tiktokDrafts || [];
+
+  if (drafts.length === 0) {
     tlist.innerHTML = '<div class="empty-state"><div class="empty-icon">🎵</div><h3>No TikTok drafts</h3></div>';
   } else {
-    state.queue.tiktokDrafts.forEach(draft => tlist.appendChild(buildTikTokDraftItem(draft)));
+    drafts.forEach(draft => tlist.appendChild(buildTikTokItem(draft)));
   }
 }
 
 function buildQueueItem(post) {
-  const item = el2('div', 'queue-item');
+  const item = mk('div', 'queue-item');
 
-  const platformEl = el2('div', `queue-platform ${post.platform}`, platformEmoji(post.platform));
-  item.appendChild(platformEl);
+  item.appendChild(mk('div', `queue-platform ${post.platform}`, platformEmoji(post.platform)));
 
-  const info = el2('div', 'queue-info');
-  info.appendChild(el2('div', 'queue-product', post.product || post.slug));
-  info.appendChild(el2('div', 'queue-time', `${post.platform} · ${formatDateTime(post.scheduledTime)}`));
+  const info = mk('div', 'queue-info');
+  const prod = mk('div', 'queue-product');
+  prod.textContent = post.product || post.slug;
+  info.appendChild(prod);
+  const time = mk('div', 'queue-time');
+  time.textContent = `${post.platform} · ${fmtDateTime(post.scheduledTime)}`;
+  info.appendChild(time);
   item.appendChild(info);
 
-  const status = el2('span', `queue-status ${post.status}`, post.status);
-  item.appendChild(status);
+  item.appendChild(mk('span', `queue-status ${post.status}`, post.status));
 
-  const actions = el2('div', 'queue-actions');
+  const actions = mk('div', 'queue-actions');
 
   if (post.status !== 'published') {
-    const markBtn = el2('button', 'btn-icon success', '✓ Published');
-    markBtn.onclick = async () => {
-      await fetch(`/api/queue/${post.id}/status`, {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+    const markBtn = mk('button', 'btn-q success', '✓ Done');
+    markBtn.addEventListener('click', async () => {
+      const r = await fetch(`/api/queue/${post.id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'published' }),
       });
-      loadQueue();
-    };
+      if (r.ok) { showToast('Marked as published'); loadQueue(); }
+    });
     actions.appendChild(markBtn);
   }
 
-  const del = el2('button', 'btn-icon danger', '✕');
-  del.onclick = async () => {
+  const delBtn = mk('button', 'btn-q danger', '✕');
+  delBtn.addEventListener('click', async () => {
     if (!confirm('Remove from queue?')) return;
-    await fetch(`/api/queue/${post.id}`, { method: 'DELETE' });
-    loadQueue();
-  };
-  actions.appendChild(del);
+    const r = await fetch(`/api/queue/${post.id}`, { method: 'DELETE' });
+    if (r.ok) { showToast('Removed from queue'); loadQueue(); }
+  });
+  actions.appendChild(delBtn);
   item.appendChild(actions);
 
   return item;
 }
 
-function buildTikTokDraftItem(draft) {
-  const item = el2('div', 'queue-item');
-  item.appendChild(el2('div', 'queue-platform tiktok', '🎵'));
+function buildTikTokItem(draft) {
+  const item = mk('div', 'queue-item');
+  item.appendChild(mk('div', 'queue-platform tiktok', '🎵'));
 
-  const info = el2('div', 'queue-info');
-  info.appendChild(el2('div', 'queue-product', draft.product || draft.id));
-  info.appendChild(el2('div', 'queue-time', `TikTok draft · Created ${formatDate(draft.createdAt)}`));
+  const info = mk('div', 'queue-info');
+  const prod = mk('div', 'queue-product');
+  prod.textContent = draft.product || draft.id;
+  info.appendChild(prod);
+  const time = mk('div', 'queue-time');
+  time.textContent = `TikTok draft · ${fmtDate(draft.createdAt)}`;
+  info.appendChild(time);
   item.appendChild(info);
 
-  item.appendChild(el2('span', `queue-status ${draft.status}`, draft.status));
+  item.appendChild(mk('span', `queue-status ${draft.status || 'queued'}`, draft.status || 'queued'));
   return item;
 }
 
 // ─────────────────────────────────────────────────────────────
-// TOAST
+// SETTINGS VIEW
 // ─────────────────────────────────────────────────────────────
 
-function showToast(message) {
-  const toast = el2('div', '', message);
-  Object.assign(toast.style, {
-    position: 'fixed', bottom: '24px', right: '24px',
-    background: 'var(--charcoal)', color: 'var(--ivory)',
-    padding: '12px 20px', borderRadius: '8px',
-    fontSize: '.85rem', zIndex: 9999,
-    boxShadow: 'var(--shadow-lg)',
-    animation: 'fadeIn .2s ease',
+async function renderSettings() {
+  const list = $('#settingsList');
+  list.innerHTML = '';
+
+  // Re-fetch status for fresh data
+  await checkStatus();
+  const st = state.status;
+  const integrations = st?.integrations || {};
+
+  const cards = [
+    {
+      icon: '🤖',
+      name: 'AI Provider',
+      connected: st?.ready,
+      special: true,
+      provider: st?.ai?.provider,
+      model: st?.ai?.model,
+      connectedNote: 'Content generation is active and free.',
+      notSetNote: 'Add GROQ_API_KEY to your .env file. Groq is free — sign up at groq.com',
+    },
+    {
+      icon: '🛍️',
+      name: 'Shopify',
+      connected: integrations.shopify,
+      connectedNote: 'Product listings will sync to your Shopify store.',
+      notSetNote: 'Add SHOPIFY_ADMIN_API_TOKEN and SHOPIFY_STORE_DOMAIN to .env',
+    },
+    {
+      icon: '📸',
+      name: 'Instagram',
+      connected: integrations.instagram,
+      connectedNote: 'Instagram Business account connected via Meta API.',
+      notSetNote: 'Add META_LONG_LIVED_TOKEN and INSTAGRAM_BUSINESS_ACCOUNT_ID to .env',
+    },
+    {
+      icon: '💙',
+      name: 'Facebook',
+      connected: integrations.facebook,
+      connectedNote: 'Facebook Page connected via Meta API.',
+      notSetNote: 'Add META_LONG_LIVED_TOKEN to .env (same token as Instagram)',
+    },
+    {
+      icon: '📌',
+      name: 'Pinterest',
+      connected: integrations.pinterest,
+      connectedNote: 'Pinterest Business account connected.',
+      notSetNote: 'Add PINTEREST_ACCESS_TOKEN to .env',
+    },
+    {
+      icon: '🎵',
+      name: 'TikTok',
+      connected: integrations.tiktok,
+      connectedNote: 'TikTok Content Posting API connected.',
+      notSetNote: 'Add TIKTOK_ACCESS_TOKEN and set TIKTOK_APPROVED=true in .env',
+    },
+  ];
+
+  cards.forEach(card => {
+    const el = mk('div', 'settings-card');
+
+    const top = mk('div', 'settings-card-top');
+
+    const iconEl = mk('div', 'settings-card-icon', card.icon);
+    top.appendChild(iconEl);
+
+    const infoEl = mk('div', 'settings-card-info');
+    const nameRow = mk('div', 'settings-card-name');
+    nameRow.appendChild(document.createTextNode(card.name));
+
+    if (card.connected) {
+      nameRow.appendChild(mk('span', 'settings-badge-connected', 'Connected ✓'));
+    } else {
+      nameRow.appendChild(mk('span', 'settings-badge-notset', 'Not set up'));
+    }
+
+    if (card.special && card.connected) {
+      nameRow.appendChild(mk('span', 'settings-badge-free', 'FREE'));
+    }
+
+    infoEl.appendChild(nameRow);
+
+    if (card.special && card.model) {
+      infoEl.appendChild(mk('div', 'settings-model-badge', `${card.provider} / ${card.model}`));
+    } else {
+      const statusEl = mk('div', 'settings-card-status');
+      statusEl.textContent = card.connected
+        ? (card.provider ? `${card.provider}` : '')
+        : 'Not connected';
+      infoEl.appendChild(statusEl);
+    }
+
+    top.appendChild(infoEl);
+    el.appendChild(top);
+
+    const note = mk('div', 'settings-card-note');
+    note.textContent = card.connected ? card.connectedNote : card.notSetNote;
+    el.appendChild(note);
+
+    list.appendChild(el);
   });
-  document.body.appendChild(toast);
-  setTimeout(() => toast.remove(), 2500);
-}
-
-// ─────────────────────────────────────────────────────────────
-// UTIL HELPERS (avoid collision with DOM $ shorthand)
-// ─────────────────────────────────────────────────────────────
-
-function el2(tag, cls, html) {
-  const e = document.createElement(tag);
-  if (cls) e.className = cls;
-  if (html !== undefined) e.innerHTML = html;
-  return e;
-}
-
-function section(title, child) {
-  const s = el2('div', 'content-section');
-  if (title) s.appendChild(el2('h3', '', title));
-  if (child) s.appendChild(child);
-  return s;
 }
 
 // ─────────────────────────────────────────────────────────────
 // INIT
 // ─────────────────────────────────────────────────────────────
 
-checkStatus();
-loadProducts();
-updateTimeSuggestions();
+(async function init() {
+  // Fetch status quietly in background
+  checkStatus();
+
+  // Load products immediately
+  await loadProducts();
+
+  // Pre-build schedule day strip (for instant feel)
+  state.selectedDay = new Date();
+  state.selectedDay.setHours(0, 0, 0, 0);
+
+  // Initialise add form step UI
+  showAddStep(0);
+
+  // Set today's date as default in schedule sheet
+  const today = new Date().toISOString().slice(0, 10);
+  $('#schedDate').value = today;
+})();
