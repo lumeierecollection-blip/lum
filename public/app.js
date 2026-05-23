@@ -1258,6 +1258,22 @@ async function renderSettings() {
   const list = $('#settingsList');
   list.innerHTML = '';
 
+  // Workflow button — top of settings
+  const wfBtn = mk('button', 'settings-workflow-btn');
+  const wfIcon = mk('div', 'settings-workflow-btn-icon', '🗂️');
+  const wfBody = mk('div', 'settings-workflow-btn-body');
+  const done = getWfDone();
+  wfBody.appendChild(mk('div', 'settings-workflow-btn-title', 'Content Workflow'));
+  wfBody.appendChild(mk('div', 'settings-workflow-btn-sub',
+    done.size > 0
+      ? `${done.size}/${PRODUCT_STEPS.length} steps done on current product`
+      : 'Weekly plan · New product checklist · Posting tips'));
+  wfBtn.appendChild(wfIcon);
+  wfBtn.appendChild(wfBody);
+  wfBtn.appendChild(mk('span', 'settings-workflow-btn-arrow', '›'));
+  wfBtn.addEventListener('click', openWorkflowSheet);
+  list.appendChild(wfBtn);
+
   // Re-fetch status for fresh data
   await checkStatus();
   const st = state.status;
@@ -1367,6 +1383,141 @@ async function renderSettings() {
 // INIT
 // ─────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────
+// WORKFLOW SHEET
+// ─────────────────────────────────────────────────────────────
+
+const WEEK_PLAN = [
+  { day: 'Mon', icon: '📸', label: 'IG Feed', platform: 'instagram' },
+  { day: 'Tue', icon: '🎵', label: 'TikTok', platform: 'tiktok' },
+  { day: 'Wed', icon: '📌', label: 'Pinterest', platform: 'pinterest' },
+  { day: 'Thu', icon: '📸', label: 'IG Story', platform: 'instagram' },
+  { day: 'Fri', icon: '💙', label: 'Facebook', platform: 'facebook' },
+  { day: 'Sat', icon: '🎬', label: 'IG Reel', platform: 'instagram' },
+  { day: 'Sun', icon: '😴', label: 'Rest', platform: null },
+];
+
+const PRODUCT_STEPS = [
+  { label: 'Get product details from supplier',   detail: 'Name, price, age range, colours, material, images',  time: '2 min' },
+  { label: 'Open app → tap + → fill in form',     detail: 'Step 1: basics · Step 2: details · Step 3: image URLs', time: '3 min' },
+  { label: 'Tap Generate — wait for content',     detail: 'AI writes all captions, titles, scripts, prompts',    time: '45 sec' },
+  { label: 'Review content in app',               detail: 'Check each platform tab — edit anything that feels off', time: '5 min' },
+  { label: 'Open Google Drive folder',            detail: 'Find the product folder — download images + copy pack', time: '2 min' },
+  { label: 'Create the TikTok/Reel video',        detail: 'Open CapCut → follow CapCut Brief step by step',       time: '20 min' },
+  { label: 'Post to Instagram',                   detail: 'Feed: hero image + feature caption · Reel: CapCut export', time: '5 min' },
+  { label: 'Post to TikTok',                      detail: 'Upload CapCut video → paste caption.txt',              time: '3 min' },
+  { label: 'Save to Pinterest',                   detail: 'Pin the hero image with pin title + description',       time: '2 min' },
+  { label: 'Post to Facebook',                    detail: 'Share to Page — link to Shopify product',              time: '2 min' },
+  { label: 'Add to Shopify',                      detail: 'Paste title, description, bullets from copy pack',     time: '5 min' },
+  { label: 'Schedule next product',               detail: 'Keep the pipeline moving — aim for 3 products/week',   time: '1 min' },
+];
+
+const POSTING_TIPS = [
+  { icon: '⏰', text: '<strong>Best posting times (SAST):</strong> Instagram 7 am & 7 pm · TikTok 7 am, noon & 9 pm · Pinterest 8–10 pm' },
+  { icon: '📅', text: '<strong>Post 3 products/week</strong> — Mon, Wed, Fri IG feeds keeps the algorithm happy without burning out.' },
+  { icon: '🎬', text: '<strong>TikTok & Reels first.</strong> Video content reaches 3–5× more people than static posts for new accounts.' },
+  { icon: '📌', text: '<strong>Pinterest is long-term.</strong> Pins get traffic for months. Pin every product, every time.' },
+  { icon: '🔁', text: '<strong>Repurpose everything.</strong> One product = 1 IG feed + 1 Reel + 1 TikTok + 3 Pins + 1 FB post + 1 email.' },
+  { icon: '💬', text: '<strong>Always reply to comments</strong> within the first hour of posting — it boosts reach significantly.' },
+];
+
+const WF_DONE_KEY = 'wf_done_steps';
+
+function getWfDone() {
+  try { return new Set(JSON.parse(localStorage.getItem(WF_DONE_KEY) || '[]')); } catch { return new Set(); }
+}
+function saveWfDone(set) {
+  localStorage.setItem(WF_DONE_KEY, JSON.stringify([...set]));
+}
+
+function openWorkflowSheet() {
+  const body = $('#workflowBody');
+  body.innerHTML = '';
+  const done = getWfDone();
+
+  // ── Section 1: Weekly posting plan ──────────────────────────
+  const secWeek = mk('div', 'wf-section');
+  secWeek.appendChild(mk('div', 'wf-section-title', 'Weekly Posting Plan'));
+
+  const todayDow = new Date().getDay(); // 0=Sun … 6=Sat
+  const dowMap = { Mon:1, Tue:2, Wed:3, Thu:4, Fri:5, Sat:6, Sun:0 };
+
+  const grid = mk('div', 'wf-week');
+  WEEK_PLAN.forEach(d => {
+    const isToday = dowMap[d.day] === todayDow;
+    const cell = mk('div', `wf-day${isToday ? ' wf-day--today' : ''}${!d.platform ? ' wf-day--rest' : ''}`);
+    cell.appendChild(mk('div', 'wf-day-name', d.day));
+    cell.appendChild(mk('div', 'wf-day-icon', d.icon));
+    cell.appendChild(mk('div', 'wf-day-label', d.label));
+    grid.appendChild(cell);
+  });
+  secWeek.appendChild(grid);
+  body.appendChild(secWeek);
+
+  // ── Section 2: New product checklist ────────────────────────
+  const secSteps = mk('div', 'wf-section');
+  const completedCount = PRODUCT_STEPS.filter((_, i) => done.has(i)).length;
+  secSteps.appendChild(mk('div', 'wf-section-title',
+    `New Product Checklist — ${completedCount}/${PRODUCT_STEPS.length} done`));
+
+  const stepsList = mk('div', 'wf-steps');
+  PRODUCT_STEPS.forEach((step, i) => {
+    const isDone   = done.has(i);
+    const isActive = !isDone && !done.has(i - 1) && (i === 0 || done.has(i - 1) || [...done].some(d => d >= i - 1));
+    const row = mk('div', `wf-step${isDone ? ' done' : isActive ? ' active' : ''}`);
+
+    const num = mk('div', 'wf-step-num');
+    if (!isDone) num.textContent = i + 1;
+    row.appendChild(num);
+
+    const stepBody = mk('div', 'wf-step-body');
+    stepBody.appendChild(mk('div', 'wf-step-label', step.label));
+    stepBody.appendChild(mk('div', 'wf-step-detail', step.detail));
+    row.appendChild(stepBody);
+
+    const timeEl = mk('div', 'wf-step-time', step.time);
+    row.appendChild(timeEl);
+
+    row.addEventListener('click', () => {
+      const d2 = getWfDone();
+      if (d2.has(i)) d2.delete(i); else d2.add(i);
+      saveWfDone(d2);
+      openWorkflowSheet(); // re-render
+    });
+
+    stepsList.appendChild(row);
+  });
+  secSteps.appendChild(stepsList);
+
+  const resetBtn = mk('button', 'wf-reset-btn', 'Reset checklist');
+  resetBtn.addEventListener('click', () => {
+    localStorage.removeItem(WF_DONE_KEY);
+    openWorkflowSheet();
+  });
+  secSteps.appendChild(resetBtn);
+  body.appendChild(secSteps);
+
+  // ── Section 3: Tips ─────────────────────────────────────────
+  const secTips = mk('div', 'wf-section');
+  secTips.appendChild(mk('div', 'wf-section-title', 'Posting Tips'));
+  const tips = mk('div', 'wf-tips');
+  POSTING_TIPS.forEach(t => {
+    const tip = mk('div', 'wf-tip');
+    tip.appendChild(mk('div', 'wf-tip-icon', t.icon));
+    const txt = mk('div', 'wf-tip-text');
+    txt.innerHTML = t.text;
+    tip.appendChild(txt);
+    tips.appendChild(tip);
+  });
+  secTips.appendChild(tips);
+  body.appendChild(secTips);
+
+  openSheet('workflowSheet');
+}
+
+$('#workflowSheetClose').addEventListener('click', () => closeSheet('workflowSheet'));
+
+// ─────────────────────────────────────────────────────────────
 (async function init() {
   // Fetch status quietly in background
   checkStatus();
