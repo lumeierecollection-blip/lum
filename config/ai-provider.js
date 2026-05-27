@@ -1,6 +1,6 @@
 /**
  * Lumière Collection — AI Provider Abstraction
- * Supports Groq (free), Google Gemini (free), OpenRouter (free models), Ollama (local).
+ * Supports Groq, Cerebras, Google Gemini, OpenRouter (all free), Ollama (local).
  * Default: Groq — llama-3.3-70b-versatile. No cost, no credit card required.
  *
  * Setup: set GROQ_API_KEY in .env
@@ -39,6 +39,8 @@ export async function callAI(systemPrompt, userPrompt, maxTokens = 1024) {
       return callGemini(systemPrompt, userPrompt, maxTokens);
     case 'openrouter':
       return callOpenRouter(systemPrompt, userPrompt, maxTokens);
+    case 'cerebras':
+      return callCerebras(systemPrompt, userPrompt, maxTokens);
     case 'ollama':
       return callOllama(systemPrompt, userPrompt, maxTokens);
     default:
@@ -66,6 +68,43 @@ async function callGroq(systemPrompt, userPrompt, maxTokens) {
   });
 
   return completion.choices[0]?.message?.content || '';
+}
+
+// ─────────────────────────────────────────────────────────────
+// CEREBRAS — Free tier, llama-3.3-70b (very fast inference)
+// https://cloud.cerebras.ai — no credit card required
+// ─────────────────────────────────────────────────────────────
+
+async function callCerebras(systemPrompt, userPrompt, maxTokens) {
+  const key = process.env.CEREBRAS_API_KEY;
+  if (!key) throw new Error('CEREBRAS_API_KEY not set — get a free key at cloud.cerebras.ai');
+
+  const model = process.env.CEREBRAS_MODEL || 'llama-3.3-70b';
+
+  const response = await fetch('https://api.cerebras.ai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${key}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      max_tokens: maxTokens,
+      temperature: 0.72,
+    }),
+  });
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Cerebras error ${response.status}: ${err.slice(0, 300)}`);
+  }
+
+  const data = await response.json();
+  return data.choices?.[0]?.message?.content || '';
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -177,6 +216,7 @@ export function getActiveProvider() {
   const provider = process.env.AI_PROVIDER || 'groq';
   const models = {
     groq: process.env.GROQ_MODEL || DEFAULT_MODEL,
+    cerebras: process.env.CEREBRAS_MODEL || 'llama-3.3-70b',
     gemini: process.env.GEMINI_MODEL || 'gemini-2.0-flash-exp',
     openrouter: process.env.OPENROUTER_MODEL || 'meta-llama/llama-3.1-8b-instruct:free',
     ollama: process.env.OLLAMA_MODEL || 'llama3.2',
