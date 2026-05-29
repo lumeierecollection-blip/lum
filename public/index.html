@@ -187,8 +187,14 @@
     <!-- STEP 3 -->
     <div class="add-step" id="addStep2">
       <div class="form-group">
-        <label class="form-label">Supplier Image URLs</label>
-        <textarea class="form-input form-textarea" id="fieldImageUrls" rows="5"
+        <label class="form-label">Product Photos</label>
+        <div class="image-upload-box" id="imageUploadBox">
+          <input type="file" id="fieldImageFiles" accept="image/*" multiple style="display:none">
+          <button type="button" class="btn btn-ghost btn-sm" id="imageUploadBtn">Upload photos from device</button>
+          <span class="form-hint" id="imageUploadHint">No files selected</span>
+        </div>
+        <div class="form-divider">or paste image URLs</div>
+        <textarea class="form-input form-textarea" id="fieldImageUrls" rows="3"
           placeholder="https://example.com/img1.jpg&#10;https://example.com/img2.jpg&#10;(one per line or comma separated)"></textarea>
         <span class="form-hint">Leave blank to generate content without images.</span>
       </div>

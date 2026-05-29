@@ -37,7 +37,7 @@ ensureDir(path.join(QUEUE_DIR, 'scheduled'));
 ensureDir(path.join(__dirname, 'public'));
 
 const app = express();
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ─────────────────────────────────────────────────────────────
@@ -78,7 +78,7 @@ function sseError(res, message) {
 /** GET /api/status — system health */
 app.get('/api/status', (req, res) => {
   const ai = getActiveProvider();
-  const hasGroq = !!process.env.GROQ_API_KEY;
+  const hasCerebras = !!process.env.CEREBRAS_API_KEY;
   const hasGemini = !!process.env.GOOGLE_AI_STUDIO_API_KEY;
   const hasOpenRouter = !!process.env.OPENROUTER_API_KEY;
   const hasShopify = !!(process.env.SHOPIFY_ADMIN_API_TOKEN && process.env.SHOPIFY_STORE_DOMAIN);
@@ -89,7 +89,7 @@ app.get('/api/status', (req, res) => {
 
   res.json({
     ai,
-    ready: hasGroq || hasGemini || hasOpenRouter || !!process.env.OLLAMA_BASE_URL,
+    ready: hasCerebras || hasGemini || hasOpenRouter || !!process.env.OLLAMA_BASE_URL,
     drive: { enabled: hasDrive },
     integrations: {
       shopify:   hasShopify,
@@ -194,12 +194,13 @@ app.get('/api/products/:slug/content-pack', (req, res) => {
 
 /**
  * POST /api/products — add + process a new product (SSE stream)
- * Body: { name, price, ageRange, season, colours, description, imageUrls }
+ * Body: { name, price, ageRange, season, colours, description, imageUrls, imageData }
+ * imageData is an optional array of { name, base64, mimeType } for direct file uploads.
  */
 app.post('/api/products', async (req, res) => {
   sseSetup(res);
 
-  const { name, price, ageRange, season, colours, description, imageUrls } = req.body;
+  const { name, price, ageRange, season, colours, description, imageUrls, imageData } = req.body;
 
   if (!name || !price || !ageRange) {
     return sseError(res, 'name, price, and ageRange are required');
@@ -213,6 +214,7 @@ app.post('/api/products', async (req, res) => {
     colours: Array.isArray(colours) ? colours : (colours || '').split(',').map((c) => c.trim()).filter(Boolean),
     description: description || '',
     imageUrls: Array.isArray(imageUrls) ? imageUrls : (imageUrls || '').split(',').map((u) => u.trim()).filter(Boolean),
+    imageData: Array.isArray(imageData) ? imageData : [],
     slug: slugify(name, { lower: true, strict: true }),
   };
 
@@ -226,9 +228,11 @@ app.post('/api/products', async (req, res) => {
     // Step 1: Images
     send('images', 'Downloading and enhancing images...');
     let imageFiles = [];
-    if (product.imageUrls.length > 0) {
+    const hasUrls = product.imageUrls.length > 0;
+    const hasUploads = product.imageData.length > 0;
+    if (hasUrls || hasUploads) {
       try {
-        imageFiles = await enhanceProductImages(product.imageUrls, product.slug, productDir);
+        imageFiles = await enhanceProductImages(product.imageUrls, product.slug, productDir, product.imageData);
         send('images', `Enhanced ${imageFiles.length} image(s)`, { count: imageFiles.length });
       } catch (err) {
         send('images', `Image processing skipped: ${err.message}`, { warning: true });
@@ -243,7 +247,7 @@ app.post('/api/products', async (req, res) => {
     send('video', '5 hyperrealistic video prompts created');
 
     // Step 3: Content pack (AI copy)
-    send('copy', 'Generating all copy (Groq AI)...');
+    send('copy', 'Generating all copy (Cerebras AI)...');
     const contentPack = await generateFullContentPack(product, (substep, msg) => {
       send('copy', msg, { substep });
     });

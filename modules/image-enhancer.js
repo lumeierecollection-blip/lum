@@ -141,23 +141,34 @@ async function upscaleWithReplicate(imageBuffer, tempInputPath) {
  * @param {string} outputDir - Base output directory path
  * @returns {Promise<Array<{path: string, label: string, width: number, height: number}>>}
  */
-export async function enhanceProductImages(imageUrls, productSlug, outputDir) {
+export async function enhanceProductImages(imageUrls, productSlug, outputDir, imageData = []) {
   const imagesDir = path.join(outputDir, 'images');
   ensureDir(imagesDir);
 
   const results = [];
   const labels = ['hero', 'detail-1', 'detail-2', 'detail-3', 'detail-4'];
 
-  for (let i = 0; i < imageUrls.length; i++) {
-    const url = imageUrls[i].trim();
+  // Build a unified list of sources: { type: 'url'|'upload', value }
+  const sources = [
+    ...imageUrls.map(u => ({ type: 'url', value: u.trim() })),
+    ...imageData.map(d => ({ type: 'upload', value: d })),
+  ];
+
+  for (let i = 0; i < sources.length; i++) {
+    const source = sources[i];
     const label = labels[i] || `detail-${i}`;
     const outputFilename = `${productSlug}-${label}.jpg`;
     const outputPath = path.join(imagesDir, outputFilename);
 
     try {
-      // 1. Download
-      logger.step(`Downloading image ${i + 1}/${imageUrls.length}...`);
-      const rawBuffer = await downloadBuffer(url);
+      let rawBuffer;
+      if (source.type === 'url') {
+        logger.step(`Downloading image ${i + 1}/${sources.length}...`);
+        rawBuffer = await downloadBuffer(source.value);
+      } else {
+        logger.step(`Processing uploaded image ${i + 1}/${sources.length}...`);
+        rawBuffer = Buffer.from(source.value.base64, 'base64');
+      }
 
       // 2. Enhance through Sharp pipeline
       logger.step(`Enhancing ${label}...`);
