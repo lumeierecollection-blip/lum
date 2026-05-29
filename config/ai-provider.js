@@ -1,26 +1,13 @@
 /**
  * Lumière Collection — AI Provider Abstraction
- * Supports Groq (free), Google Gemini (free), OpenRouter (free models), Ollama (local).
- * Default: Groq — llama-3.3-70b-versatile. No cost, no credit card required.
+ * Supports Cerebras (fast inference), Google Gemini (free), OpenRouter (free models), Ollama (local).
+ * Default: Cerebras — llama-3.3-70b. No credit card required for free tier.
  *
- * Setup: set GROQ_API_KEY in .env
- * Get your free key at: https://console.groq.com
+ * Setup: set CEREBRAS_API_KEY in .env
+ * Get your free key at: https://cloud.cerebras.ai
  */
 
-import Groq from 'groq-sdk';
-
-const DEFAULT_MODEL = 'llama-3.3-70b-versatile';
-
-let _groqClient = null;
-
-function getGroqClient() {
-  if (!_groqClient) {
-    const key = process.env.GROQ_API_KEY;
-    if (!key) throw new Error('GROQ_API_KEY not set in .env — get a free key at console.groq.com');
-    _groqClient = new Groq({ apiKey: key });
-  }
-  return _groqClient;
-}
+const DEFAULT_MODEL = 'llama-3.3-70b';
 
 /**
  * Call the configured AI provider with a system prompt + user message.
@@ -30,11 +17,11 @@ function getGroqClient() {
  * @returns {Promise<string>} Raw text response
  */
 export async function callAI(systemPrompt, userPrompt, maxTokens = 1024) {
-  const provider = process.env.AI_PROVIDER || 'groq';
+  const provider = process.env.AI_PROVIDER || 'cerebras';
 
   switch (provider) {
-    case 'groq':
-      return callGroq(systemPrompt, userPrompt, maxTokens);
+    case 'cerebras':
+      return callCerebras(systemPrompt, userPrompt, maxTokens);
     case 'gemini':
       return callGemini(systemPrompt, userPrompt, maxTokens);
     case 'openrouter':
@@ -42,30 +29,45 @@ export async function callAI(systemPrompt, userPrompt, maxTokens = 1024) {
     case 'ollama':
       return callOllama(systemPrompt, userPrompt, maxTokens);
     default:
-      return callGroq(systemPrompt, userPrompt, maxTokens);
+      return callCerebras(systemPrompt, userPrompt, maxTokens);
   }
 }
 
 // ─────────────────────────────────────────────────────────────
-// GROQ — Free tier, llama-3.3-70b-versatile
-// https://console.groq.com — no credit card required
+// CEREBRAS — Fast inference, llama-3.3-70b
+// https://cloud.cerebras.ai — free tier available
 // ─────────────────────────────────────────────────────────────
 
-async function callGroq(systemPrompt, userPrompt, maxTokens) {
-  const client = getGroqClient();
-  const model = process.env.GROQ_MODEL || DEFAULT_MODEL;
+async function callCerebras(systemPrompt, userPrompt, maxTokens) {
+  const key = process.env.CEREBRAS_API_KEY;
+  if (!key) throw new Error('CEREBRAS_API_KEY not set in .env — get a free key at cloud.cerebras.ai');
 
-  const completion = await client.chat.completions.create({
-    model,
-    messages: [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt },
-    ],
-    max_tokens: maxTokens,
-    temperature: 0.72,
+  const model = process.env.CEREBRAS_MODEL || DEFAULT_MODEL;
+
+  const response = await fetch('https://api.cerebras.ai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${key}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      max_tokens: maxTokens,
+      temperature: 0.72,
+    }),
   });
 
-  return completion.choices[0]?.message?.content || '';
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Cerebras API error ${response.status}: ${err.slice(0, 300)}`);
+  }
+
+  const data = await response.json();
+  return data.choices?.[0]?.message?.content || '';
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -174,9 +176,9 @@ async function callOllama(systemPrompt, userPrompt, maxTokens) {
  * @returns {string}
  */
 export function getActiveProvider() {
-  const provider = process.env.AI_PROVIDER || 'groq';
+  const provider = process.env.AI_PROVIDER || 'cerebras';
   const models = {
-    groq: process.env.GROQ_MODEL || DEFAULT_MODEL,
+    cerebras: process.env.CEREBRAS_MODEL || DEFAULT_MODEL,
     gemini: process.env.GEMINI_MODEL || 'gemini-2.0-flash-exp',
     openrouter: process.env.OPENROUTER_MODEL || 'meta-llama/llama-3.1-8b-instruct:free',
     ollama: process.env.OLLAMA_MODEL || 'llama3.2',

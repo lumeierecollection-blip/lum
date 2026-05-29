@@ -19,6 +19,7 @@ const state = {
   selectedDay: null,          // Date object for schedule view
   queue: { scheduled: [], tiktokDrafts: [] },
   addStep: 0,
+  uploadedImages: [],
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -283,6 +284,9 @@ function resetAddForm() {
   $('#fieldColours').value = '';
   $('#fieldDescription').value = '';
   $('#fieldImageUrls').value = '';
+  $('#fieldImageFiles').value = '';
+  $('#imageUploadHint').textContent = 'No files selected';
+  state.uploadedImages = [];
 
   // Reset pills
   $$('#ageRangePills .pill').forEach(p => p.classList.remove('active'));
@@ -320,6 +324,20 @@ function initPillGroup(groupId, hiddenId) {
 initPillGroup('ageRangePills', 'fieldAgeRange');
 initPillGroup('seasonPills', 'fieldSeason');
 
+// Photo upload handler
+$('#imageUploadBtn').addEventListener('click', () => $('#fieldImageFiles').click());
+$('#fieldImageFiles').addEventListener('change', async (e) => {
+  const files = Array.from(e.target.files);
+  if (!files.length) return;
+  state.uploadedImages = await Promise.all(files.map(f => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve({ name: f.name, base64: reader.result.split(',')[1], mimeType: f.type });
+    reader.onerror = reject;
+    reader.readAsDataURL(f);
+  })));
+  $('#imageUploadHint').textContent = `${files.length} file${files.length > 1 ? 's' : ''} selected: ${files.map(f => f.name).join(', ')}`;
+});
+
 $('#addSheetClose').addEventListener('click', () => closeSheet('addSheet'));
 
 $('#addStepBack').addEventListener('click', () => {
@@ -344,6 +362,7 @@ $('#addStepNext').addEventListener('click', async () => {
       colours: $('#fieldColours').value,
       description: $('#fieldDescription').value,
       imageUrls: $('#fieldImageUrls').value,
+      imageData: state.uploadedImages,
     };
     closeSheet('addSheet');
     await startProductGeneration(data);
@@ -357,7 +376,7 @@ $('#addStepNext').addEventListener('click', async () => {
 const GENERATION_STEPS = [
   { key: 'images',   icon: '🖼️',  label: 'Downloading & enhancing images' },
   { key: 'video',    icon: '🎬',  label: 'Generating video prompts' },
-  { key: 'copy',     icon: '✍️',  label: 'Writing all copy (Groq AI)' },
+  { key: 'copy',     icon: '✍️',  label: 'Writing all copy (Cerebras AI)' },
   { key: 'shopify',  icon: '🛍️', label: 'Shopify product listing' },
   { key: 'instagram',icon: '📸', label: 'Instagram captions' },
   { key: 'tiktok',   icon: '🎵', label: 'TikTok script & hook' },
@@ -435,6 +454,7 @@ async function startProductGeneration(formData) {
         colours:     formData.colours,
         description: formData.description,
         imageUrls:   formData.imageUrls || '',
+        imageData:   formData.imageData || [],
       }),
     });
 
@@ -1288,7 +1308,7 @@ async function renderSettings() {
       provider: st?.ai?.provider,
       model: st?.ai?.model,
       connectedNote: 'Content generation is active and free.',
-      notSetNote: 'Add GROQ_API_KEY to your .env file. Groq is free — sign up at groq.com',
+      notSetNote: 'Add CEREBRAS_API_KEY to your .env file. Sign up at cloud.cerebras.ai',
     },
     {
       icon: '🛍️',
