@@ -1,6 +1,6 @@
 /**
  * Lumière Collection — Content Generator
- * Generates all copy via free AI provider (Groq/Gemini/OpenRouter/Ollama).
+ * Generates all copy via free AI provider (Cerebras/Gemini/OpenRouter/Ollama).
  * No API cost. Brand voice validation with auto-retry built in.
  */
 

@@ -284,9 +284,8 @@ function resetAddForm() {
   $('#fieldColours').value = '';
   $('#fieldDescription').value = '';
   $('#fieldImageUrls').value = '';
-  $('#fieldImageFiles').value = '';
-  $('#imageUploadHint').textContent = 'No files selected';
   state.uploadedImages = [];
+  if ($('#uploadPreviews')) $('#uploadPreviews').innerHTML = '';
 
   // Reset pills
   $$('#ageRangePills .pill').forEach(p => p.classList.remove('active'));
@@ -324,18 +323,75 @@ function initPillGroup(groupId, hiddenId) {
 initPillGroup('ageRangePills', 'fieldAgeRange');
 initPillGroup('seasonPills', 'fieldSeason');
 
-// Photo upload handler
-$('#imageUploadBtn').addEventListener('click', () => $('#fieldImageFiles').click());
-$('#fieldImageFiles').addEventListener('change', async (e) => {
-  const files = Array.from(e.target.files);
-  if (!files.length) return;
-  state.uploadedImages = await Promise.all(files.map(f => new Promise((resolve, reject) => {
+// ─────────────────────────────────────────────────────────────
+// PHOTO UPLOAD — drag-and-drop + file picker + previews
+// ─────────────────────────────────────────────────────────────
+
+const MAX_UPLOAD_MB  = 20;
+const MAX_UPLOAD_FILES = 5;
+
+function readFileAsBase64(file) {
+  return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => resolve({ name: f.name, base64: reader.result.split(',')[1], mimeType: f.type });
+    reader.onload  = () => resolve({ name: file.name, base64: reader.result.split(',')[1], mimeType: file.type });
     reader.onerror = reject;
-    reader.readAsDataURL(f);
-  })));
-  $('#imageUploadHint').textContent = `${files.length} file${files.length > 1 ? 's' : ''} selected: ${files.map(f => f.name).join(', ')}`;
+    reader.readAsDataURL(file);
+  });
+}
+
+function renderUploadPreviews() {
+  const container = $('#uploadPreviews');
+  container.innerHTML = '';
+  state.uploadedImages.forEach((img, idx) => {
+    const item   = mk('div', 'upload-preview-item');
+    const thumb  = mk('img');
+    thumb.src    = `data:${img.mimeType};base64,${img.base64}`;
+    thumb.alt    = img.name;
+    const removeBtn = mk('button', 'upload-preview-remove', '×');
+    removeBtn.type = 'button';
+    removeBtn.title = 'Remove';
+    removeBtn.addEventListener('click', () => {
+      state.uploadedImages.splice(idx, 1);
+      renderUploadPreviews();
+    });
+    item.appendChild(thumb);
+    item.appendChild(removeBtn);
+    container.appendChild(item);
+  });
+}
+
+async function handlePhotoFiles(files) {
+  const allowed = Array.from(files).filter(f => f.type.startsWith('image/'));
+  const tooBig  = allowed.filter(f => f.size > MAX_UPLOAD_MB * 1024 * 1024);
+  if (tooBig.length) {
+    showToast(`${tooBig.map(f => f.name).join(', ')} exceeds ${MAX_UPLOAD_MB} MB limit — skipped`);
+  }
+  const valid = allowed.filter(f => f.size <= MAX_UPLOAD_MB * 1024 * 1024);
+  const remaining = MAX_UPLOAD_FILES - state.uploadedImages.length;
+  if (valid.length > remaining) {
+    showToast(`Max ${MAX_UPLOAD_FILES} photos — keeping the first ${remaining}`);
+  }
+  const toProcess = valid.slice(0, Math.max(0, remaining));
+  if (!toProcess.length) return;
+  const encoded = await Promise.all(toProcess.map(readFileAsBase64));
+  state.uploadedImages.push(...encoded);
+  renderUploadPreviews();
+}
+
+const dropzone = $('#uploadDropzone');
+const fileInput = $('#fieldImageFiles');
+
+fileInput.addEventListener('change', (e) => {
+  handlePhotoFiles(e.target.files);
+  e.target.value = '';
+});
+
+dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('drag-over'); });
+dropzone.addEventListener('dragleave', ()  => dropzone.classList.remove('drag-over'));
+dropzone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropzone.classList.remove('drag-over');
+  handlePhotoFiles(e.dataTransfer.files);
 });
 
 $('#addSheetClose').addEventListener('click', () => closeSheet('addSheet'));

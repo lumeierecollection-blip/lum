@@ -13,7 +13,7 @@ Given a product name, price, age range, and a few supplier images, the system:
 1. Downloads and enhances supplier images to lifestyle photography quality (warm grade, contrast, subtle grain)
 2. Optionally upscales to 4K via Replicate's Real-ESRGAN model
 3. Generates 5 hyperrealistic video prompts engineered for **Kling AI** and **Google Veo 3** — all 8 layers included
-4. Writes all copy via Claude API:
+4. Writes all copy via Cerebras AI (llama-3.3-70b — free, extremely fast):
    - Shopify product title, description, bullets, SEO meta tags, alt texts
    - Instagram captions (story / feature / UGC styles) + 28–30 hashtags
    - TikTok hook, voiceover script, on-screen text cues
@@ -33,7 +33,7 @@ Given a product name, price, age range, and a few supplier images, the system:
 ## Prerequisites
 
 - **Node.js 20+** — check with `node --version`
-- An **Anthropic API key** (required for all copy generation)
+- A **Cerebras API key** (required for all copy generation — free at cloud.cerebras.ai)
 - Optional (for publishing): Shopify, Meta, Pinterest, TikTok API credentials
 - Optional (for 4K upscaling): Replicate API key
 - **Kling AI account** (klingai.com) for generating videos from prompts
@@ -60,8 +60,10 @@ cp .env.example .env
 Open `.env` in any text editor and fill in your API keys. At minimum, you need:
 
 ```env
-ANTHROPIC_API_KEY=your_key_here
+CEREBRAS_API_KEY=your_key_here
 ```
+
+Get a free key at [cloud.cerebras.ai](https://cloud.cerebras.ai) — no credit card required.
 
 All other keys are optional — the system gracefully skips features when credentials are missing, saving draft files for manual use instead.
 
@@ -77,10 +79,10 @@ This checks all API keys and prints token expiry warnings if relevant.
 
 ## API Account Setup
 
-### Anthropic (Claude API) — Required
-1. Go to [console.anthropic.com](https://console.anthropic.com)
-2. Create an account → API Keys → Create new key
-3. Copy key to `ANTHROPIC_API_KEY` in `.env`
+### Cerebras AI — Required
+1. Go to [cloud.cerebras.ai](https://cloud.cerebras.ai)
+2. Create a free account → API Keys → Create new key
+3. Copy key to `CEREBRAS_API_KEY` in `.env`
 
 ### Shopify — Optional
 1. In your Shopify Admin: Settings → Apps and sales channels → Develop apps
@@ -203,7 +205,7 @@ Reads all processed products from `output/` and generates a 7-day content calend
 node lumiere.js copy --product "meadow-linen-playsuit"
 ```
 
-Re-runs Claude API for all copy for an existing product. Useful if you want to update tone or try new variations.
+Re-runs Cerebras AI for all copy for an existing product. Useful if you want to update tone or try new variations.
 
 ### Regenerate video prompts only
 
@@ -327,8 +329,8 @@ While your TikTok Content Posting API application is under review, use the manua
 
 ## Troubleshooting
 
-### "ANTHROPIC_API_KEY is not set"
-Add your Anthropic API key to `.env`. This is the only required key.
+### "CEREBRAS_API_KEY is not set"
+Add your Cerebras API key to `.env`. This is the only required key. Get a free one at [cloud.cerebras.ai](https://cloud.cerebras.ai).
 
 ### "Shopify push failed: HTTP 401"
 Your `SHOPIFY_ADMIN_API_TOKEN` is wrong or the app doesn't have `write_products` scope. Check Shopify Admin → Apps → Your App → API credentials.
@@ -435,7 +437,7 @@ Expected output: full `output/meadow-linen-playsuit/` folder with all assets. Sh
 | Component | Technology |
 |-----------|-----------|
 | Runtime | Node.js 20+ (ESM) |
-| AI / Copy | Anthropic Claude API (`claude-sonnet-4-6`) |
+| AI / Copy | Cerebras AI (`llama-3.3-70b`) |
 | Image processing | Sharp (warm grade + grain) |
 | 4K upscaling | Replicate Real-ESRGAN (optional) |
 | Video prompts | Kling AI v2 + Google Veo 3 (prompt generation) |

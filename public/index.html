@@ -188,15 +188,25 @@
     <div class="add-step" id="addStep2">
       <div class="form-group">
         <label class="form-label">Product Photos</label>
-        <div class="image-upload-box" id="imageUploadBox">
-          <input type="file" id="fieldImageFiles" accept="image/*" multiple style="display:none">
-          <button type="button" class="btn btn-ghost btn-sm" id="imageUploadBtn">Upload photos from device</button>
-          <span class="form-hint" id="imageUploadHint">No files selected</span>
+
+        <!-- Drop zone -->
+        <div class="upload-dropzone" id="uploadDropzone">
+          <input type="file" id="fieldImageFiles" accept="image/jpeg,image/png,image/webp,image/heic" multiple>
+          <div class="upload-dropzone-inner">
+            <div class="upload-icon">📷</div>
+            <p class="upload-primary">Tap to choose photos, or drag &amp; drop</p>
+            <p class="upload-secondary">JPG, PNG, WEBP, HEIC · up to 5 photos · 20 MB each</p>
+          </div>
         </div>
-        <div class="form-divider">or paste image URLs</div>
-        <textarea class="form-input form-textarea" id="fieldImageUrls" rows="3"
-          placeholder="https://example.com/img1.jpg&#10;https://example.com/img2.jpg&#10;(one per line or comma separated)"></textarea>
-        <span class="form-hint">Leave blank to generate content without images.</span>
+
+        <!-- Thumbnail previews -->
+        <div class="upload-previews" id="uploadPreviews"></div>
+
+        <div class="form-divider">or paste a supplier URL instead</div>
+
+        <textarea class="form-input form-textarea" id="fieldImageUrls" rows="2"
+          placeholder="https://supplier.com/product-image.jpg&#10;(one per line)"></textarea>
+        <span class="form-hint">Leave everything blank to generate copy without images.</span>
       </div>
       <div class="ready-box">
         <div class="ready-icon">✨</div>

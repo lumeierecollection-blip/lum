@@ -51,7 +51,7 @@ async function runProductPipeline(options) {
   // Validate required env
   const { ok } = validateEnv();
   if (!ok) {
-    logger.error('ANTHROPIC_API_KEY is required. Add it to .env and try again.');
+    logger.error('CEREBRAS_API_KEY is required. Add it to .env — get a free key at cloud.cerebras.ai');
     process.exit(1);
   }
 
@@ -96,7 +96,7 @@ async function runProductPipeline(options) {
   }
 
   // ── Step 3: Content Pack ────────────────────────────────────
-  const copySpinner = logger.spinner('Generating content pack (Claude API)...');
+  const copySpinner = logger.spinner('Generating content pack (Cerebras AI)...');
   let contentPack;
   try {
     contentPack = await generateFullContentPack(product);

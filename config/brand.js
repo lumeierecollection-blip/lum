@@ -24,7 +24,7 @@ const brand = {
   NICHE: "Children's clothing and apparel, ages 0–12",
 
   /**
-   * Tone and voice rules enforced in every Claude API call.
+   * Tone and voice rules enforced in every AI call.
    * DO rules describe the target voice.
    * DONT rules prevent common AI writing patterns.
    */

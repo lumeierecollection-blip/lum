@@ -53,9 +53,8 @@ export function checkMetaTokenHealth(tokenCreatedDate) {
  * @returns {{ ok: boolean, missing: string[] }}
  */
 export function validateEnv() {
-  // One of these two must be set for Claude API to work
-  const hasAnthropicAuth = !!(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
-  const required = hasAnthropicAuth ? [] : ['ANTHROPIC_API_KEY'];
+  const hasCerebrasAuth = !!process.env.CEREBRAS_API_KEY;
+  const required = hasCerebrasAuth ? [] : ['CEREBRAS_API_KEY'];
 
   const optional = [
     'SHOPIFY_STORE_DOMAIN',
@@ -89,9 +88,8 @@ export function printStatusReport() {
   logger.banner();
   console.log('API KEY STATUS\n');
 
-  const anthropicSet = !!(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
   const checks = [
-    { key: anthropicSet ? (process.env.ANTHROPIC_AUTH_TOKEN ? 'ANTHROPIC_AUTH_TOKEN' : 'ANTHROPIC_API_KEY') : 'ANTHROPIC_API_KEY', label: 'Claude API (Anthropic)', required: true },
+    { key: 'CEREBRAS_API_KEY', label: 'Cerebras AI', required: true },
     { key: 'SHOPIFY_ADMIN_API_TOKEN', label: 'Shopify Admin API', required: false },
     { key: 'META_LONG_LIVED_TOKEN', label: 'Meta (Instagram/Facebook)', required: false },
     { key: 'INSTAGRAM_BUSINESS_ACCOUNT_ID', label: 'Instagram Business Account', required: false },

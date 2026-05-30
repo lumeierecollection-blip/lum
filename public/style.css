@@ -329,27 +329,89 @@ img { display: block; max-width: 100%; }
 }
 
 /* ── IMAGE UPLOAD ──────────────────────────────────────────── */
-.image-upload-box {
+.upload-dropzone {
+  position: relative;
+  border: 2px dashed var(--border);
+  border-radius: 14px;
+  padding: 28px 16px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color .18s, background .18s;
+  margin-bottom: 10px;
+}
+.upload-dropzone:hover,
+.upload-dropzone.drag-over {
+  border-color: var(--accent, #C9A84C);
+  background: rgba(201,168,76,.06);
+}
+.upload-dropzone input[type="file"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+.upload-icon  { font-size: 2rem; margin-bottom: 6px; }
+.upload-primary {
+  font-size: .9rem;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0 0 4px;
+}
+.upload-secondary {
+  font-size: .72rem;
+  color: var(--muted);
+  margin: 0;
+}
+.upload-previews {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border: 1.5px dashed var(--border);
-  border-radius: 10px;
+  flex-wrap: wrap;
+  gap: 8px;
   margin-bottom: 8px;
+}
+.upload-preview-item {
+  position: relative;
+  width: 70px;
+  height: 70px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1.5px solid var(--border);
+}
+.upload-preview-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.upload-preview-remove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(0,0,0,.65);
+  color: #fff;
+  border: none;
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
+  cursor: pointer;
+  padding: 0;
 }
 .form-divider {
   font-size: .72rem;
   color: var(--muted);
   text-align: center;
-  margin: 8px 0;
+  margin: 10px 0 8px;
   position: relative;
 }
 .form-divider::before, .form-divider::after {
   content: '';
   position: absolute;
   top: 50%;
-  width: 38%;
+  width: 36%;
   height: 1px;
   background: var(--border);
 }

@@ -1,6 +1,6 @@
 /**
  * Lumière Collection — Prompt Templates
- * All Claude API system prompts and video AI prompt generators.
+ * All AI system prompts and video AI prompt generators.
  * This file is the creative engine of the entire system.
  */
 

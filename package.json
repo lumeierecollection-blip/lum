@@ -11,7 +11,6 @@
     "calendar": "node lumiere.js calendar --week current"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "latest",
     "chalk": "^5.3.0",
     "commander": "^12.0.0",
     "date-fns": "^3.6.0",
