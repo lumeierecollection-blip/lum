@@ -53,9 +53,16 @@ export function checkMetaTokenHealth(tokenCreatedDate) {
  * @returns {{ ok: boolean, missing: string[] }}
  */
 export function validateEnv() {
-  // One of these two must be set for Claude API to work
-  const hasAnthropicAuth = !!(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
-  const required = hasAnthropicAuth ? [] : ['ANTHROPIC_API_KEY'];
+  const provider = process.env.AI_PROVIDER || 'cerebras';
+  const providerKeyMap = {
+    cerebras: 'CEREBRAS_API_KEY',
+    gemini: 'GOOGLE_AI_STUDIO_API_KEY',
+    openrouter: 'OPENROUTER_API_KEY',
+    ollama: null, // no key needed
+  };
+
+  const requiredKey = providerKeyMap[provider];
+  const required = requiredKey && !process.env[requiredKey] ? [requiredKey] : [];
 
   const optional = [
     'SHOPIFY_STORE_DOMAIN',
@@ -89,9 +96,17 @@ export function printStatusReport() {
   logger.banner();
   console.log('API KEY STATUS\n');
 
-  const anthropicSet = !!(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
+  const provider = process.env.AI_PROVIDER || 'cerebras';
+  const providerKeyMap = {
+    cerebras: { key: 'CEREBRAS_API_KEY', label: 'Cerebras AI (llama-3.3-70b)' },
+    gemini: { key: 'GOOGLE_AI_STUDIO_API_KEY', label: 'Google Gemini AI' },
+    openrouter: { key: 'OPENROUTER_API_KEY', label: 'OpenRouter AI' },
+    ollama: { key: null, label: 'Ollama (local)' },
+  };
+  const { key: aiKey, label: aiLabel } = providerKeyMap[provider] || providerKeyMap.cerebras;
+
   const checks = [
-    { key: anthropicSet ? (process.env.ANTHROPIC_AUTH_TOKEN ? 'ANTHROPIC_AUTH_TOKEN' : 'ANTHROPIC_API_KEY') : 'ANTHROPIC_API_KEY', label: 'Claude API (Anthropic)', required: true },
+    { key: aiKey, label: aiLabel, required: !!aiKey },
     { key: 'SHOPIFY_ADMIN_API_TOKEN', label: 'Shopify Admin API', required: false },
     { key: 'META_LONG_LIVED_TOKEN', label: 'Meta (Instagram/Facebook)', required: false },
     { key: 'INSTAGRAM_BUSINESS_ACCOUNT_ID', label: 'Instagram Business Account', required: false },
@@ -104,6 +119,10 @@ export function printStatusReport() {
   ];
 
   checks.forEach(({ key, label, required }) => {
+    if (!key) {
+      logger.success(`${label}: ready (no key required)`);
+      return;
+    }
     const value = process.env[key];
     if (value) {
       const masked = value.slice(0, 6) + '••••••••';

@@ -51,7 +51,8 @@ async function runProductPipeline(options) {
   // Validate required env
   const { ok } = validateEnv();
   if (!ok) {
-    logger.error('ANTHROPIC_API_KEY is required. Add it to .env and try again.');
+    const provider = process.env.AI_PROVIDER || 'cerebras';
+    logger.error(`AI provider key missing for provider "${provider}". Check AI_PROVIDER and the matching key in .env.`);
     process.exit(1);
   }
 
