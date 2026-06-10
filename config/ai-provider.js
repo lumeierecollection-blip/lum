@@ -43,31 +43,45 @@ async function callCerebras(systemPrompt, userPrompt, maxTokens) {
   if (!key) throw new Error('CEREBRAS_API_KEY not set in .env — get a free key at cloud.cerebras.ai');
 
   const model = process.env.CEREBRAS_MODEL || DEFAULT_MODEL;
-
-  const response = await fetch('https://api.cerebras.ai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${key}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-      max_tokens: maxTokens,
-      temperature: 0.72,
-    }),
+  const body = JSON.stringify({
+    model,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt },
+    ],
+    max_tokens: maxTokens,
+    temperature: 0.72,
   });
 
-  if (!response.ok) {
+  const delays = [3000, 6000, 12000, 24000]; // retry after 3s, 6s, 12s, 24s
+  let lastError;
+
+  for (let attempt = 0; attempt <= delays.length; attempt++) {
+    const response = await fetch('https://api.cerebras.ai/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body,
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      return data.choices?.[0]?.message?.content || '';
+    }
+
+    // Retry on 429 (rate limit) or 503 (high traffic / overloaded)
+    if ((response.status === 429 || response.status === 503) && attempt < delays.length) {
+      const wait = delays[attempt];
+      console.warn(`Cerebras busy (${response.status}) — retrying in ${wait / 1000}s… (attempt ${attempt + 1}/${delays.length})`);
+      await new Promise((r) => setTimeout(r, wait));
+      continue;
+    }
+
     const err = await response.text();
-    throw new Error(`Cerebras API error ${response.status}: ${err.slice(0, 300)}`);
+    lastError = new Error(`Cerebras API error ${response.status}: ${err.slice(0, 300)}`);
+    break;
   }
 
-  const data = await response.json();
-  return data.choices?.[0]?.message?.content || '';
+  throw lastError;
 }
 
 // ─────────────────────────────────────────────────────────────
