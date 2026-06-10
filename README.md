@@ -53,14 +53,10 @@ npm install
 
 ### 2. Set up environment variables
 
-```bash
-cp .env.example .env
-```
-
-Open `.env` in any text editor and fill in your API keys. At minimum, you need:
+The `.env` file is already included in the repo with the default settings. Open it in any text editor and fill in your keys. At minimum you need:
 
 ```env
-ANTHROPIC_API_KEY=your_key_here
+CEREBRAS_API_KEY=your_key_here   # free at cloud.cerebras.ai
 ```
 
 All other keys are optional — the system gracefully skips features when credentials are missing, saving draft files for manual use instead.
@@ -77,10 +73,11 @@ This checks all API keys and prints token expiry warnings if relevant.
 
 ## API Account Setup
 
-### Anthropic (Claude API) — Required
-1. Go to [console.anthropic.com](https://console.anthropic.com)
-2. Create an account → API Keys → Create new key
-3. Copy key to `ANTHROPIC_API_KEY` in `.env`
+### Cerebras (AI / Copy Generation) — Required
+1. Go to [cloud.cerebras.ai](https://cloud.cerebras.ai)
+2. Create a free account → API Keys → Create new key
+3. Copy key to `CEREBRAS_API_KEY` in `.env`
+4. The default model is `gpt-oss-120b` — no changes needed
 
 ### Shopify — Optional
 1. In your Shopify Admin: Settings → Apps and sales channels → Develop apps
@@ -327,8 +324,8 @@ While your TikTok Content Posting API application is under review, use the manua
 
 ## Troubleshooting
 
-### "ANTHROPIC_API_KEY is not set"
-Add your Anthropic API key to `.env`. This is the only required key.
+### "AI provider key missing"
+Add your Cerebras API key to `.env`: `CEREBRAS_API_KEY=your_key_here`. Get a free key at [cloud.cerebras.ai](https://cloud.cerebras.ai).
 
 ### "Shopify push failed: HTTP 401"
 Your `SHOPIFY_ADMIN_API_TOKEN` is wrong or the app doesn't have `write_products` scope. Check Shopify Admin → Apps → Your App → API credentials.
@@ -435,7 +432,7 @@ Expected output: full `output/meadow-linen-playsuit/` folder with all assets. Sh
 | Component | Technology |
 |-----------|-----------|
 | Runtime | Node.js 20+ (ESM) |
-| AI / Copy | Anthropic Claude API (`claude-sonnet-4-6`) |
+| AI / Copy | Cerebras Inference API (`gpt-oss-120b`) |
 | Image processing | Sharp (warm grade + grain) |
 | 4K upscaling | Replicate Real-ESRGAN (optional) |
 | Video prompts | Kling AI v2 + Google Veo 3 (prompt generation) |
