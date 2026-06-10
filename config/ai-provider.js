@@ -1,7 +1,7 @@
 /**
  * Lumière Collection — AI Provider Abstraction
  * Supports Cerebras (fast inference), Google Gemini (free), OpenRouter (free models), Ollama (local).
- * Default: Cerebras — llama-3.3-70b. No credit card required for free tier.
+ * Default: Cerebras — gpt-oss-120b. No credit card required for free tier.
  *
  * Setup: set CEREBRAS_API_KEY in .env
  * Get your free key at: https://cloud.cerebras.ai
@@ -34,7 +34,7 @@ export async function callAI(systemPrompt, userPrompt, maxTokens = 1024) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// CEREBRAS — Fast inference, llama-3.3-70b
+// CEREBRAS — Fast inference, gpt-oss-120b
 // https://cloud.cerebras.ai — free tier available
 // ─────────────────────────────────────────────────────────────
 

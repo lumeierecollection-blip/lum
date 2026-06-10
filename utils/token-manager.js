@@ -98,7 +98,7 @@ export function printStatusReport() {
 
   const provider = process.env.AI_PROVIDER || 'cerebras';
   const providerKeyMap = {
-    cerebras: { key: 'CEREBRAS_API_KEY', label: 'Cerebras AI (llama-3.3-70b)' },
+    cerebras: { key: 'CEREBRAS_API_KEY', label: 'Cerebras AI (gpt-oss-120b)' },
     gemini: { key: 'GOOGLE_AI_STUDIO_API_KEY', label: 'Google Gemini AI' },
     openrouter: { key: 'OPENROUTER_API_KEY', label: 'OpenRouter AI' },
     ollama: { key: null, label: 'Ollama (local)' },
