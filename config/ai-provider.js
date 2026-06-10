@@ -7,7 +7,7 @@
  * Get your free key at: https://cloud.cerebras.ai
  */
 
-const DEFAULT_MODEL = 'llama-3.3-70b';
+const DEFAULT_MODEL = 'gpt-oss-120b';
 
 /**
  * Call the configured AI provider with a system prompt + user message.
